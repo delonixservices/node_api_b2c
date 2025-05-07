@@ -1264,9 +1264,9 @@ const transaction = await Transaction.findById(transactionid);
 if (!transaction) {
 return res.status(500).send('Invalid booking id');
 }
-if (transaction.userId != req.user._id) {
-return res.status(403).send('Not Authorized!');
-}
+// if (transaction.userId != req.user._id) {
+// return res.status(403).send('Not Authorized!');
+// }
 
 if (transaction.status != 1) {
 return res.status(422).send('Cannot get voucher for incomplete transaction');
