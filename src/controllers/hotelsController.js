@@ -1098,7 +1098,7 @@ exports.cancelBooking = async (req, res, next) => {
 
 const user = req.body.user;
 const transactionId = req.body.transactionId;
-// console.log(transactionId, user._id);
+console.log(transactionId, user._id);
 
 if (user._id !== req.user._id) {
 return res.status(403).json({

@@ -6,7 +6,7 @@
   "license": "Private",
   "private": true,
   "scripts": {
-    "start": "nodemon server.js"
+    "start": "node server.js"
   },
   "author": "TripBazaar",
   "dependencies": {
