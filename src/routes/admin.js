@@ -105,6 +105,8 @@ const {
   getAllVendorTransactions
 } = require('../controllers/admin/metaSearchController');
 
+const { getDashboardData } = require('../controllers/admin/dashboardController');
+
 router.post('/banners', isAdmin, upload.single('image'), addBanner);
 
 router.get('/banners', isAdmin, allBanners);
@@ -226,7 +228,6 @@ router.get('/config', isAdmin, getConfig);
 
 router.put('/config', isAdmin, editConfig);
 
-
 // generate payment link
 router.post('/payment-generate', [
   body('name', 'Field name should not be empty.')
@@ -297,5 +298,7 @@ router.get('/meta-search/vendor-all', getAllVendors);
 router.put('/meta-search/vendor', editVendor);
 
 router.get('/meta-search/:id/transactions', getAllVendorTransactions);
+
+router.get('/getDashboardData',isAdmin, getDashboardData);
 
 module.exports = router;

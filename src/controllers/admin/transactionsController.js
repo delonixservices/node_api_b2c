@@ -207,29 +207,24 @@ exports.sendVoucherInvoice = async (req, res, next) => {
 }
 
 exports.processRefund = async (req, res) => {
-
   const transactionId = req.body.transactionId;
-
   const transaction = await Transaction.findOne({
     "_id": transactionId
   });
-
   if (!transaction) {
     return res.status(404).json({
       message: "Invalid transaction id, please try again"
     });
   }
-
+ amount = "2.1";
   const payload = {
-    'reference_no': transaction.payment_response.tracking_id,
-    'refund_amount': transaction.payment_response.amount,
-    "refund_ref_no": transaction.payment_response.order_id
+    "reference_no": transaction.payment_response.tracking_id,
+    "refund_amount": amount,
+    "refund_ref_no": transaction.payment_response.order_id,
   }
-
+  console.log(payload);
   const payloadString = JSON.stringify(payload);
-
   const enc_data = ccavanue.encrypt(payloadString, workingKey);
-
   const requestBody = {
     'enc_request': enc_data,
     'access_code': accessCode,
@@ -237,85 +232,63 @@ exports.processRefund = async (req, res) => {
     'response_type': 'JSON',
     'command': 'refundOrder',
     'reference_no': transaction.payment_response.tracking_id,
-    'refund_amount': transaction.payment_response.amount,
+    'refund_amount': amount,
     "refund_ref_no": transaction.payment_response.order_id,
-    'version': '1.1'
+    'version': '1.2'
   };
-
-  logger.info(payload);
-
+  console.log(requestBody)
   const requestBodyString = jtfd(requestBody);
   logger.info('Refund Order...');
-  logger.info(requestBodyString);
-
+  console.log(requestBodyString);
   // @TODO do not run the refund api if refund is already processed
-
   const resData = await Api.post('https://apitest.ccavenue.com/apis/servlet/DoWebTrans', requestBodyString);
-
   logger.info(resData);
-
   const parsedResponse = url.parse("/?" + resData, true).query;
-
   logger.info('OrderRefund Response...');
   // logger.info(parsedResponse);
   console.log(parsedResponse);
-
   if (parsedResponse.status != 0) {
     return res.status(400).json({
       'status': 'failed',
       'message': 'Unable to process the request.'
     });
   }
-
   const decryptResponse = ccavanue.decrypt(parsedResponse.enc_response, workingKey);
-
   const decryptResponseObj = JSON.parse(decryptResponse);
-
   logger.info('Decrypted Response...');
   console.log(decryptResponseObj);
-
   if (decryptResponseObj.refund_status != 0) {
     return res.json({
       'status': 'refund failed',
       'message': 'Cannot initiate refund request for the given order. Refund request failed.'
     });
   }
-
   transaction.status = 7; // refunded
   transaction.refund_response = decryptResponseObj;
-
   res.json({
     'status': 'success',
     'message': 'Refund successful',
     'data': decryptResponseObj
   });
-
   await transaction.save();
 }
 
 exports.orderStatus = async (req, res) => {
-
   const transactionId = req.body.transactionId;
-
   const transaction = await Transaction.findOne({
     "_id": transactionId
   });
-
   if (!transaction) {
     return res.status(404).json({
       message: "Invalid transaction id, please try again"
     });
   }
-
   const payload = {
     'reference_no': transaction.payment_response.tracking_id,
     "order_no": transaction.payment_response.order_id
   }
-
   const payloadString = JSON.stringify(payload);
-
   const enc_data = ccavanue.encrypt(payloadString, workingKey);
-
   const requestBody = {
     'enc_request': enc_data,
     'access_code': accessCode,
@@ -324,45 +297,35 @@ exports.orderStatus = async (req, res) => {
     'command': 'orderStatusTracker',
     'reference_no': transaction.payment_response.tracking_id,
     'order_no': transaction.payment_response.order_id,
-    'version': '1.1'
+    'version': '1.2'
   };
-
   console.log(payload);
 
   const requestBodyString = jtfd(requestBody);
   logger.info('Refund Order...');
   logger.info(requestBodyString);
-
+  console.log(requestBodyString);
   const resData = await Api.post('https://apitest.ccavenue.com/apis/servlet/DoWebTrans', requestBodyString);
-
   logger.info(resData);
-
   const parsedResponse = url.parse("/?" + resData, true).query;
-
   logger.info('OrderStatus Response...');
   console.log(parsedResponse);
-
   if (parsedResponse.status != 0) {
     return res.status(400).json({
       'status': 'failed',
       'message': 'Unable to process the request.'
     });
   }
-
   const decryptResponse = ccavanue.decrypt(parsedResponse.enc_response, workingKey);
-
   const decryptResponseObj = JSON.parse(decryptResponse);
-
   logger.info('Decrypted Response...');
   console.log(decryptResponseObj);
-
   // if (decryptResponseObj.refund_status !== 0) {
   //   return res.json({
   //     'status': 'failed',
   //     'message': 'Cannot complete order status request for the given order. Order Status request failed.'
   //   });
   // }
-
   res.json({
     'status': 'success',
     'data': decryptResponseObj
