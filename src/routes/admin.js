@@ -70,7 +70,8 @@ const {
   sendVoucherInvoice,
   processRefund,
   orderStatus,
-  orderConfirm
+  orderConfirm,
+  // getpaymentoption
 } = require('../controllers/admin/transactionsController');
 
 const {
@@ -229,16 +230,19 @@ router.get('/config', isAdmin, getConfig);
 router.put('/config', isAdmin, editConfig);
 
 // generate payment link
+const validateRequest = (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(422).json({ errors: errors.array() });
+  }
+  next();
+};
+
 router.post('/payment-generate', [
-  body('name', 'Field name should not be empty.')
-  .not()
-  .isEmpty(),
-  body('amount', 'amount should be greater than or equals to 100.')
-  .isInt({
-    allow_leading_zeroes: true,
-    gt: 99
-  })
-], isAdmin, generatePayment);
+  body('name', 'Name is required and cannot be empty.').trim().not().isEmpty(),
+  body('amount', 'Amount must be a positive integer greater than or equal to 100.').isInt({ gt: 99 }),
+], validateRequest, isAdmin, generatePayment);
+
 
 router.get('/payment-process/:id', processPayment);
 
@@ -291,14 +295,15 @@ router.post('/send-sms', [
 router.post('/send-voucher-invoice', sendVoucherInvoice);
 
 // meta-search
-router.post('/meta-search/vendor', addVendor);
+// router.post('/api/meta-search/vendor', addVendor);
 
-router.get('/meta-search/vendor-all', getAllVendors);
+// router.get('/api/meta-search/vendor-all', getAllVendors);
 
-router.put('/meta-search/vendor', editVendor);
+// router.put('/meta-search/vendor', editVendor);
 
 router.get('/meta-search/:id/transactions', getAllVendorTransactions);
 
 router.get('/getDashboardData',isAdmin, getDashboardData);
 
+// router.post('/get-paymentoption',isAdmin, getpaymentoption);
 module.exports = router;

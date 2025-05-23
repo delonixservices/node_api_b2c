@@ -216,10 +216,10 @@ exports.processRefund = async (req, res) => {
       message: "Invalid transaction id, please try again"
     });
   }
- amount = "2.1";
+
   const payload = {
     "reference_no": transaction.payment_response.tracking_id,
-    "refund_amount": amount,
+    "refund_amount": transaction.payment_response.amount,
     "refund_ref_no": transaction.payment_response.order_id,
   }
   console.log(payload);
@@ -232,9 +232,9 @@ exports.processRefund = async (req, res) => {
     'response_type': 'JSON',
     'command': 'refundOrder',
     'reference_no': transaction.payment_response.tracking_id,
-    'refund_amount': amount,
+    'refund_amount': transaction.payment_response.amount,
     "refund_ref_no": transaction.payment_response.order_id,
-    'version': '1.2'
+    'version': '1.1'
   };
   console.log(requestBody)
   const requestBodyString = jtfd(requestBody);
@@ -412,3 +412,53 @@ exports.orderConfirm = async (req, res) => {
     'data': decryptResponseObj
   });
 }
+
+// exports.getpaymentoption = async(req,res)=>{
+//   const userid = req.userid;
+//   const user_id = await userid.findOne({
+//     "userid": id
+//   });
+//   if (!id) {
+//     return res.status(404).json({
+//       message: "Invalid id, please try again"
+//     });
+//   }
+//  const payload = {
+//     customer_id : transaction.payment_response.userId
+//   }
+//  const payloadString = JSON.stringify(payload);
+//   const enc_data = ccavanue.encrypt(payloadString, workingKey);
+//   const requestBody = {
+//     'enc_request': enc_data,
+//     'access_code': accessCode,
+//     'request_type': 'JSON',
+//     'response_type': 'JSON',
+//     'command': 'getCustomerPaymentOptions',
+//     'customer_id' :transaction.payment_response.userId,
+//     'version': '1.1'
+//   };
+//   logger.info(payload);
+//   const requestBodyString = jtfd(requestBody);
+//   logger.info(requestBodyString);
+//   const resData = await Api.post('https://apitest.ccavenue.com/apis/servlet/DoWebTrans', requestBodyString);
+//   const parsedResponse = url.parse("/?" + resData, true).query;
+//   logger.info('User Payment Option Getting');
+//   // logger.info(parsedResponse);
+//   console.log(parsedResponse);
+
+//   if (parsedResponse.status != 0) {
+//     return res.status(400).json({
+//       'status': 'failed',
+//       'message': 'Unable to process the request.'
+//     });
+//   }
+//   const decryptResponse = ccavanue.decrypt(parsedResponse.enc_response, workingKey);
+//   const decryptResponseObj = JSON.parse(decryptResponse);
+//   logger.info('Decrypted Response...');
+//   console.log(decryptResponseObj);
+//   res.json({
+//     'status': 'success',
+//     'data': decryptResponseObj
+//   });
+// }
+
