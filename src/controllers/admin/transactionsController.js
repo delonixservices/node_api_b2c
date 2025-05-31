@@ -1,8 +1,9 @@
 const url = require('url');
+const axios = require('axios');
 const Api = require('../../services/apiService');
 const Transaction = require('../../models/HotelTransaction');
 const Mail = require('../../services/mailService');
-
+const ConfigModel = require('../../models/Config');
 const logger = require('../../config/logger');
 
 const {
@@ -206,72 +207,6 @@ exports.sendVoucherInvoice = async (req, res, next) => {
   }
 }
 
-exports.processRefund = async (req, res) => {
-  const transactionId = req.body.transactionId;
-  const transaction = await Transaction.findOne({
-    "_id": transactionId
-  });
-  if (!transaction) {
-    return res.status(404).json({
-      message: "Invalid transaction id, please try again"
-    });
-  }
-
-  const payload = {
-    "reference_no": transaction.payment_response.tracking_id,
-    "refund_amount": transaction.payment_response.amount,
-    "refund_ref_no": transaction.payment_response.order_id,
-  }
-  console.log(payload);
-  const payloadString = JSON.stringify(payload);
-  const enc_data = ccavanue.encrypt(payloadString, workingKey);
-  const requestBody = {
-    'enc_request': enc_data,
-    'access_code': accessCode,
-    'request_type': 'JSON',
-    'response_type': 'JSON',
-    'command': 'refundOrder',
-    'reference_no': transaction.payment_response.tracking_id,
-    'refund_amount': transaction.payment_response.amount,
-    "refund_ref_no": transaction.payment_response.order_id,
-    'version': '1.1'
-  };
-  console.log(requestBody)
-  const requestBodyString = jtfd(requestBody);
-  logger.info('Refund Order...');
-  console.log(requestBodyString);
-  // @TODO do not run the refund api if refund is already processed
-  const resData = await Api.post('https://apitest.ccavenue.com/apis/servlet/DoWebTrans', requestBodyString);
-  logger.info(resData);
-  const parsedResponse = url.parse("/?" + resData, true).query;
-  logger.info('OrderRefund Response...');
-  // logger.info(parsedResponse);
-  console.log(parsedResponse);
-  if (parsedResponse.status != 0) {
-    return res.status(400).json({
-      'status': 'failed',
-      'message': 'Unable to process the request.'
-    });
-  }
-  const decryptResponse = ccavanue.decrypt(parsedResponse.enc_response, workingKey);
-  const decryptResponseObj = JSON.parse(decryptResponse);
-  logger.info('Decrypted Response...');
-  console.log(decryptResponseObj);
-  if (decryptResponseObj.refund_status != 0) {
-    return res.json({
-      'status': 'refund failed',
-      'message': 'Cannot initiate refund request for the given order. Refund request failed.'
-    });
-  }
-  transaction.status = 7; // refunded
-  transaction.refund_response = decryptResponseObj;
-  res.json({
-    'status': 'success',
-    'message': 'Refund successful',
-    'data': decryptResponseObj
-  });
-  await transaction.save();
-}
 
 exports.orderStatus = async (req, res) => {
   const transactionId = req.body.transactionId;
@@ -462,3 +397,224 @@ exports.orderConfirm = async (req, res) => {
 //   });
 // }
 
+exports.processRefund = async (req, res) => {
+  try {
+    const transactionId = req.body.transactionId;
+
+    // Validate transactionId
+    if (!transactionId || !require('mongoose').Types.ObjectId.isValid(transactionId)) {
+      return res.status(400).json({
+        status: 'failed',
+        message: 'Invalid transaction ID format',
+      });
+    }
+
+    const transaction = await Transaction.findOne({ _id: transactionId });
+    if (!transaction) {
+      return res.status(404).json({
+        message: "Invalid transaction id, please try again"
+      });
+    }
+
+    // Check if transaction is already refunded
+    if (transaction.status === 7 || transaction.refunded) {
+      return res.status(400).json({
+        status: 'failed',
+        message: 'Refund has already been processed for this transaction.',
+      });
+    }
+
+    // Fetch the latest config for refund calculation
+    const config = await ConfigModel.findOne().sort({ updated_at: -1 });
+    if (!config) {
+      return res.status(500).json({
+        status: 'failed',
+        message: 'Configuration not found in the database',
+      });
+    }
+
+    // Calculate custom refund amount
+    const calculateRefund = (transaction, config) => {
+      const amount = transaction.pricing.total_chargeable_amount;
+      const gst = transaction.pricing.gst || 0;
+      const processingFee = transaction.pricing.processing_fee || config.processing_fee || 0;
+      const serviceCharge = transaction.pricing.service_charges || config.service_charge.value || 0;
+
+      logger.info('Processing refund for transaction:', { amount, gst, processingFee, serviceCharge });
+
+      let cancelCharge = 0;
+      const cancelChargeconfig = config.cancellation_charge;
+      if (cancelChargeconfig.type === 'percentage') {
+        cancelCharge = (amount * cancelChargeconfig.value) / 100;
+      } else if (cancelChargeconfig.type === 'fixed') {
+        cancelCharge = cancelChargeconfig.value;
+      }
+
+      const refundAmount = amount - gst - processingFee - serviceCharge - cancelCharge;
+      logger.info('Calculated Refund Amount:', { refundAmount });
+
+      return {
+        refundAmount,
+        details: {
+          amount,
+          gst,
+          processingFee,
+          serviceCharge,
+          cancelCharge,
+        },
+      };
+    };
+
+    const { refundAmount, details } = calculateRefund(transaction, config);
+
+    if (refundAmount <= 0) {
+      return res.status(400).json({
+        status: 'failed',
+        message: 'Refund amount is invalid or zero.',
+      });
+    }
+
+    const payload = {
+      "reference_no": transaction.payment_response.tracking_id,
+      "refund_amount": refundAmount,
+      "refund_ref_no": transaction.payment_response.order_id,
+    };
+
+    logger.info('Preparing refund payload:', payload);
+    const payloadString = JSON.stringify(payload);
+    const enc_data = ccavanue.encrypt(payloadString, workingKey);
+
+    const requestBody = {
+      'enc_request': enc_data,
+      'access_code': accessCode,
+      'request_type': 'JSON',
+      'response_type': 'JSON',
+      'command': 'refundOrder',
+      'reference_no': transaction.payment_response.tracking_id,
+      'refund_amount': refundAmount,
+      "refund_ref_no": transaction.payment_response.order_id,
+      'version': '1.1'
+    };
+
+    logger.info('Sending refund request to CCAvenue:', { requestBody });
+    const requestBodyString = jtfd(requestBody);
+
+    // Log refund attempt
+    transaction.refund_attempts = transaction.refund_attempts || [];
+    transaction.refund_attempts.push({
+      refund_ref_no: transaction.payment_response.order_id,
+      refund_amount: refundAmount,
+      refund_details: details,
+      timestamp: new Date(),
+      status: 'pending',
+    });
+    await transaction.save();
+
+    // Call CCAvenue refund API
+    let resData;
+    try {
+      resData = await Api.post('https://apitest.ccavenue.com/apis/servlet/DoWebTrans', requestBodyString);
+    } catch (apiError) {
+      logger.error('CCAvenue API request failed:', {
+        error: apiError.message,
+        status: apiError.response?.status,
+        data: apiError.response?.data,
+      });
+      return res.status(500).json({
+        status: 'failed',
+        message: 'Failed to communicate with CCAvenue API.',
+        error: apiError.message,
+      });
+    }
+
+    logger.info('Raw CCAvenue API Response:', { data: resData });
+    const parsedResponse = url.parse("/?" + resData, true).query;
+    logger.info('OrderRefund Response:', parsedResponse);
+
+    if (parsedResponse.status != 0) {
+      return res.status(400).json({
+        'status': 'failed',
+        'message': 'Unable to process the request.'
+      });
+    }
+
+    const decryptResponse = ccavanue.decrypt(parsedResponse.enc_response, workingKey);
+    const decryptResponseObj = JSON.parse(decryptResponse);
+    logger.info('Decrypted Response:', decryptResponseObj);
+
+    // Update refund attempt status
+    const refundAttempt = transaction.refund_attempts[transaction.refund_attempts.length - 1];
+    refundAttempt.status = decryptResponseObj.refund_status === 0 ? 'success' : 'failed';
+    refundAttempt.response = decryptResponseObj;
+
+    if (decryptResponseObj.refund_status !== 0) {
+      logger.error('Refund request failed:', { decryptResponseObj });
+      await transaction.save();
+      return res.status(400).json({
+        'status': 'refund failed',
+        'message': 'Cannot initiate refund request for the given order. Refund request failed.',
+        'error': decryptResponseObj.error_desc || 'Unknown error'
+      });
+    }
+
+    // Update transaction status
+    transaction.status = 7; // refunded
+    transaction.refunded = true;
+    transaction.refund_response = decryptResponseObj;
+    await transaction.save();
+
+    // Log changes to config changeHistory
+    await ConfigModel.findByIdAndUpdate(
+      config._id,
+      {
+        $push: {
+          changeHistory: {
+            changedBy: {
+              ip: req.ip,
+              userId: req.user?._id || null,
+            },
+            changes: {
+              refundProcessed: {
+                transactionId,
+                refundAmount,
+                details,
+              },
+            },
+          },
+        },
+      },
+      { new: true }
+    );
+
+    return res.json({
+      'status': 'success',
+      'message': `Refund of ₹${refundAmount.toFixed(2)} has been processed successfully`,
+      'data': {
+        refundAmount: refundAmount.toFixed(2),
+        refundDetails: {
+          originalAmount: details.amount.toFixed(2),
+          gst: details.gst.toFixed(2),
+          processingFee: details.processingFee.toFixed(2),
+          serviceCharge: details.serviceCharge.toFixed(2),
+          cancellationCharge: details.cancelCharge.toFixed(2),
+          netRefundAmount: refundAmount.toFixed(2)
+        },
+        transactionId: transactionId,
+        hotelName: transaction.hotel.name,
+        bookingReference: transaction.payment_response.order_id,
+        refundResponse: decryptResponseObj
+      }
+    });
+
+  } catch (error) {
+    logger.error('Error processing refund:', {
+      error: error.message,
+      stack: error.stack,
+    });
+    return res.status(500).json({
+      status: 'failed',
+      message: 'An error occurred while processing the refund.',
+      error: error.message,
+    });
+  }
+};
