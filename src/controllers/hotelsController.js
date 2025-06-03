@@ -34,6 +34,8 @@ generateVoucher
 
 const {redisAuth} = require("../config")
 const { createClient } = require('redis');
+const { unregisterPartial } = require('handlebars');
+const HotelTransaction = require('../models/HotelTransaction');
 
 exports.suggest = async (req, res, next) => {
 const term = req.body.query;
@@ -1004,6 +1006,8 @@ return res.status(403).json({
 });
 }
 
+
+
 const data = await Transaction.find({
 $and: [{
 "userId": {
@@ -1218,6 +1222,37 @@ console.log(`Warning: Hotel cancel - failed to send canellation message to the a
 });
 
 };
+
+
+exports.details = async (req,res,next)=>{
+  const transactionid = req.query.transactionid;
+  const transaction = await Transaction.findById(transactionid);
+  if(!transaction){
+    return res.status(500).send('Invalid booking id');
+  }
+  if(transaction.userId != req.user._id){
+    return res.status(403).send('Not Authorized!');
+  } 
+  if(transaction.status != 1){
+    return res.status(422).send('Cannot get invoice for incomplete transaction');
+  }
+  
+  let temp;
+  try{
+    temp = await HotelTransaction.findOne({
+      'transaction_identifier': transaction.transaction_identifier,
+    })
+    if(!temp){
+      return res.status(404).send('Transaction not found');
+    }
+    return res.status(200).send(temp);
+  }
+  catch(err){
+    console.log(err);
+    return res.status(500).send('Cannot get your booking details for the given transaction. Please contact support.');
+  }
+}
+
 
 exports.invoice = async (req, res, next) => {
 const transactionid = req.query.transactionid;

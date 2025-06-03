@@ -65,61 +65,57 @@ exports.register = async (req, res, next) => {
 }
 
 exports.login = async (req, res, next) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    const error = new Error('Validation Failed!');
+    error.statusCode = 422;
+    error.data = errors.array();
+    return next(error);
+  }
+  const mobile = req.body.mobile;
+  const password = req.body.password;
   try {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      const error = new Error('Validation Failed!');
-      error.statusCode = 422;
-      error.data = errors.array();
-      return next(error);
-    }
-
-    const { email, password } = req.body;
-
-    // Find user by email instead of mobile
-    let user = await User.findOne({ email });
-    if (!user) {
-      const error = new Error('Email or Password incorrect');
-      error.statusCode = 401;
-      throw error;
-    }
-
-    // Check if user is a Google user
-    if (user.isGoogleUser) {
-      const error = new Error('Please login with Google');
-      error.statusCode = 401;
-      throw error;
-    }
-
-    const isEqual = await bcrypt.compare(password, user.password);
-    if (!isEqual) {
-      const error = new Error('Email or Password incorrect');
-      error.statusCode = 401;
-      throw error;
-    }
-
-    const token = jwt.sign(
-      { userId: user._id, email: user.email },
-      jwtSecret
-    );
-    const refreshToken = randtoken.uid(256);
-
-    await new Token({
-      refresh_token: refreshToken,
-      userId: user._id
-    }).save();
-
-    user = user.toObject();
-    delete user.otp;
-    delete user.password;
-    delete user.password_reset_expiry;
-    delete user.password_reset_token;
-
-    res.json({
-      token,
-      refreshToken,
-      user
+    let user = await User.findOne({
+      'mobile': mobile
     });
+    if (!user) {
+      const error = new Error('Mobile or Password incorrect');
+      error.statusCode = 401;
+      throw error;
+    } else {
+      const isEqual = await bcrypt.compare(password, user.password);
+      if (!isEqual) {
+        const error = new Error('Mobile or Password incorrect');
+        error.statusCode = 401;
+        throw error;
+      } else {
+        const token = jwt.sign({
+            'userId': user._id,
+            'mobile': user.mobile
+          },
+          jwtSecret, {
+            // expiresIn: "1h" // expires in 1 hr
+          });
+        const refreshToken = randtoken.uid(256);
+
+        await new Token({
+          'refresh_token': refreshToken,
+          'userId': user._id
+        }).save();
+
+        user = user.toObject();
+        delete user.otp;
+        delete user.password;
+        delete user.password_reset_expiry;
+        delete user.password_reset_token;
+
+        res.json({
+          'token': token,
+          'refreshToken': refreshToken,
+          'user': user
+        });
+      }
+    }
   } catch (err) {
     next(err);
   }

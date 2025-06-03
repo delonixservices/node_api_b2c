@@ -10,7 +10,8 @@ const {
   transactions,
   cancelBooking,
   invoice,
-  voucher
+  voucher,
+  details
 } = require('../controllers/hotelsController');
 
 const {
@@ -32,6 +33,8 @@ router.post('/bookingpolicy', bookingpolicy);
 router.post('/prebook', prebook);
 
 router.post('/transactions', isAuth, transactions);
+
+router.post('/details', isAuth, details);
 
 router.post('/cancel', isAuth, cancelBooking);
 
