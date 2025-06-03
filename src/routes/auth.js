@@ -18,7 +18,9 @@ const {
   resetPassword,
   updateUserProfile,
   updateMobile,
-  updatePassword
+  updatePassword,
+  googleLogin,
+
 } = require('../controllers/authController');
 
 const isAuth = require('../middleware/isAuth');
@@ -171,5 +173,10 @@ router.post('/password-update', [
 
 // router.post('/mobile-update',isAuth, updateMobile);
 
+router.post('/google-login', [
+  body('credential')
+    .notEmpty()
+    .withMessage('Google credential is required'),
+], googleLogin);
 
 module.exports = router;
