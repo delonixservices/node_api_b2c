@@ -34,7 +34,7 @@ router.post('/prebook', prebook);
 
 router.post('/transactions', isAuth, transactions);
 
-router.post('/details', isAuth, details);
+router.get('/details', isAuth, details);
 
 router.post('/cancel', isAuth, cancelBooking);
 

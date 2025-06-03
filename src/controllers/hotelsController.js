@@ -1227,14 +1227,16 @@ console.log(`Warning: Hotel cancel - failed to send canellation message to the a
 exports.details = async (req,res,next)=>{
   const transactionid = req.query.transactionid;
   const transaction = await Transaction.findById(transactionid);
-  if(!transaction){
-    return res.status(500).send('Invalid booking id');
+  if (!transaction) {
+  return res.status(500).send('Invalid booking id');
   }
-  if(transaction.userId != req.user._id){
-    return res.status(403).send('Not Authorized!');
-  } 
-  if(transaction.status != 1){
-    return res.status(422).send('Cannot get invoice for incomplete transaction');
+  
+  if (transaction.userId != req.user._id) {
+  return res.status(403).send('Not Authorized!');
+  }
+  console.log(transaction)
+  if (transaction.status != 1) {
+  return res.status(422).send('Cannot get invoice for incomplete transaction');
   }
   
   let temp;
