@@ -29,8 +29,17 @@ const hotelSchema = new Schema({
     required: true
   },
   "rates": {
-    type: Object,
-    // required: true
+    packages: [{
+      base_amount: Number,
+      service_component: Number,
+      gst: Number,
+      chargeable_rate: Number,
+      room_details: Object,
+      booking_key: String,
+      room_rate: Number,
+      client_commission: Number,
+      guest_discount_percentage: Number
+    }]
   },
   "name": {
     type: String,

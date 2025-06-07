@@ -5,7 +5,8 @@ const configSchema = new Schema({
   markup: {
     type: {
       type: String,
-      required: true
+      required: true,
+      enum: ['percentage', 'fixed']
     },
     value: {
       type: Number,
@@ -15,7 +16,8 @@ const configSchema = new Schema({
   service_charge: {
     type: {
       type: String,
-      required: true
+      required: true,
+      enum: ['percentage', 'fixed']
     },
     value: {
       type: Number,
@@ -29,7 +31,8 @@ const configSchema = new Schema({
   cancellation_charge: {
     type: {
       type: String,
-      required: true
+      required: true,
+      enum: ['percentage', 'fixed']
     },
     value: {
       type: Number,

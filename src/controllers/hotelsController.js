@@ -36,6 +36,11 @@ const {redisAuth} = require("../config")
 const { createClient } = require('redis');
 const { unregisterPartial } = require('handlebars');
 const HotelTransaction = require('../models/HotelTransaction');
+const crypto = require('crypto');
+
+const generateTransactionIdentifier = () => {
+  return crypto.randomBytes(16).toString('hex');
+};
 
 exports.suggest = async (req, res, next) => {
 const term = req.body.query;
@@ -396,34 +401,31 @@ try {
 hotels = await Hotel.insertMany(selectedHotels);
 
 const promiseArray = hotels.map(async (hotel) => {
-// console.log('total packages: ', hotel.rates.packages.length);
 hotel.hotelId = hotel._id;
-// delete hotel._id;
-// Add markup
 const hotelPackage = hotel.rates.packages[0];
 
-// console.log(hotelPackage);
 try {
 // addMarkup method will apply markup and other charges on hotelPackage
 await addMarkup(hotelPackage);
 } catch (err) {
 throw err;
 }
-if (hotelPackage.base_amount < minPrice) {
-minPrice = hotelPackage.base_amount;
+
+// Update min/max price based on total chargeable amount
+const totalAmount = hotelPackage.base_amount + hotelPackage.service_component + hotelPackage.gst;
+if (totalAmount < minPrice || minPrice === 0) {
+minPrice = totalAmount;
 }
-if (hotelPackage.base_amount > maxPrice) {
-maxPrice = hotelPackage.base_amount;
+if (totalAmount > maxPrice) {
+maxPrice = totalAmount;
 }
 
 return hotel;
 });
 
 const allHotels = await Promise.all(promiseArray);
-// console.log(hotels)
 const filteredHotels = [];
-console.log(allHotels);
-console.log(filters);
+
 allHotels.forEach((hotel) => {
 // hotel filters
 if (filters.roomType && filters.roomType.length > 0) {
@@ -469,13 +471,14 @@ if (!flag) return;
 }
 
 if (filters.price && filters.price.min >= 0 && filters.price.max > 0) {
-const flag = hotel.rates.packages[0].base_amount >= filters.price.min && hotel.rates.packages[0].base_amount <= filters.price.max;
+const totalAmount = hotel.rates.packages[0].base_amount + 
+                   hotel.rates.packages[0].service_component + 
+                   hotel.rates.packages[0].gst;
+const flag = totalAmount >= filters.price.min && totalAmount <= filters.price.max;
 if (!flag) return;
 }
 filteredHotels.push(hotel);
 });
-
-console.log(filteredHotels);
 
 hotels = filteredHotels;
 
@@ -681,321 +684,447 @@ res.json(dataObj);
 
 exports.bookingpolicy = async (req, res, next) => {
 
-const transaction_id = req.body.transaction_id;
-const search = req.body.search;
-// const package = req.body.package;
-const bookingKey = req.body.bookingKey;
-const hotelId = req.body.hotelId;
 
-if (!search || !bookingKey || !hotelId) {
-return res.status(400).send("Validation failed...");
-}
+  const transaction_id = req.body.transaction_id;
+  const search = req.body.search;
+  // const package = req.body.package;
+  const bookingKey = req.body.bookingKey;
+  const hotelId = req.body.hotelId;
+  
+  
+  if (!search || !bookingKey || !hotelId) {
+  return res.status(400).send("Validation failed...");
+  }
+  
+  
+  if (!transaction_id) {
+  logger.error('transaction_identifier is required in bookingPolicy... ');
+  return res.status(400).send("Validation failed... transaction_id is required..");
+  }
+  
+  
+  let data;
+  let hotel;
+  
+  
+  try {
+  hotel = await Hotel.findById(hotelId);
+  let package = hotel.rates.packages.filter((package) => package.booking_key === bookingKey)[0];
+  
+  // Add logging to check hotel and package data
+  logger.info('Hotel and Package Data:', {
+    hotelId,
+    bookingKey,
+    hotelFound: !!hotel,
+    packageFound: !!package,
+    totalPackages: hotel?.rates?.packages?.length
+  });
 
-if (!transaction_id) {
-logger.error('transaction_identifier is required in bookingPolicy... ');
-return res.status(400).send("Validation failed... transaction_id is required..");
-}
+  // Get the actual package data from _doc
+  const packageData = package._doc || package;
 
-let data;
-let hotel;
+  // Remove _id field from package object
+  if (packageData) {
+    const { _id, ...packageWithoutId } = packageData;
+    package = packageWithoutId;
+  } else {
+    logger.error('Package not found:', {
+      hotelId,
+      bookingKey,
+      availableBookingKeys: hotel?.rates?.packages?.map(p => p.booking_key)
+    });
+    throw new Error("Unable to get the booking policy - Package not found");
+  }
+  
+  // Format package object with exact structure
+  const formattedPackage = {
+    booking_key: package.booking_key,
+    chargeable_rate: package.chargeable_rate,
+    chargeable_rate_currency: package.chargeable_rate_currency || "INR",
+    chargeable_rate_with_tax_excluded: package.chargeable_rate_with_tax_excluded || 0,
+    client_commission: package.client_commission,
+    client_commission_currency: package.client_commission_currency || "INR",
+    client_commission_percentage: package.client_commission_percentage || 0,
+    guest_discount_with_tax_excluded_percentage: package.guest_discount_with_tax_excluded_percentage || 0,
+    hotel_id: package.hotel_id || hotel.id,
+    indicative_market_rates: package.indicative_market_rates || [],
+    rate_type: package.rate_type || "net",
+    room_details: {
+      beds: package.room_details?.beds || { queen: 1 },
+      description: package.room_details?.description || "Standard Room",
+      food: package.room_details?.food || 1,
+      non_refundable: package.room_details?.non_refundable || false,
+      rate_plan_code: package.room_details?.rate_plan_code || "",
+      room_code: package.room_details?.room_code || "",
+      room_type: package.room_details?.room_type || "Standard",
+      room_view: package.room_details?.room_view || "",
+      supplier_description: package.room_details?.supplier_description || "Standard Room"
+    },
+    room_rate: package.room_rate,
+    room_rate_currency: package.room_rate_currency || "INR"
+  };
 
-try {
-hotel = await Hotel.findById(hotelId);
-let package = hotel.rates.packages.filter((package) => package.booking_key === bookingKey)[0];
+  // Log the package data for debugging
+  logger.info('Package Data:', {
+    originalPackage: packageData,
+    formattedPackage: formattedPackage,
+    missingFields: {
+      chargeable_rate: !package.chargeable_rate,
+      client_commission: !package.client_commission,
+      room_rate: !package.room_rate
+    }
+  });
 
-// console.log(transaction_id, search, package);
-if (!package) {
-logger.error("No package found by this booking_key");
-throw new Error("Unable to get the booking policy");
-}
+  // Format search object
+  const formattedSearch = {
+    adult_count: search.adult_count,
+    check_in_date: search.check_in_date,
+    check_out_date: search.check_out_date,
+    child_count: search.child_count,
+    currency: search.currency || "INR",
+    hotel_id_list: [hotel.id], // Use hotel.id instead of search.hotel_id_list
+    locale: search.locale || "en-US",
+    room_count: search.room_count,
+    source_market: search.source_market || "IN"
+  };
 
-data = await Api.hotels.post("/bookingpolicy", {
-"bookingpolicy": {
-"transaction_identifier": transaction_id,
-"search": search,
-"package": package,
-}
-});
-} catch (err) {
-return res.status(500).json({
-'message': err.message
-})
-}
+  // Create final payload
+  const payload = {
+    bookingpolicy: {
+      package: formattedPackage,
+      search: formattedSearch,
+      transaction_identifier: transaction_id
+    }
+  };
 
-if (!data || !data.data) {
-console.log(data);
-return res.status(500).send("Unable to get the booking policy");
-}
+  // Log the bookingpolicy request data
+  logger.info('BookingPolicy Request Data:', payload);
+  
+  try {
+    data = await Api.hotels.post("/bookingpolicy", payload);
+    logger.info('BookingPolicy API Response:', {
+      status: 'success',
+      hasData: !!data,
+      hasResponseData: !!data?.data
+    });
+  } catch (apiError) {
+    logger.error('BookingPolicy API Error:', {
+      error: apiError.message,
+      response: apiError.response?.data,
+      status: apiError.response?.status
+    });
+    throw new Error(`Booking policy API error: ${apiError.message}`);
+  }
 
-// bookingPolicy = refrence of data.data
-const bookingPolicy = data.data;
-const hotelPackage = bookingPolicy.package;
-
-try {
-// addMarkup method will apply markup and other charges on hotelPackage
-await addMarkup(hotelPackage);
-} catch (err) {
-return res.status(500).json({
-'message': `${err}`
-})
-}
-
-const booking_policy = await new BookingPolicy({
-'booking_policy': bookingPolicy,
-'search': search,
-'transaction_identifier': transaction_id,
-"hotel": hotelId,
-});
-
-await booking_policy.save();
-
-res.json(data);
+  if (!data || !data.data) {
+    logger.error('Invalid API Response:', {
+      data: data,
+      hasData: !!data,
+      hasResponseData: !!data?.data
+    });
+    return res.status(500).send("Unable to get the booking policy - Invalid API response");
+  }
+  
+  
+  // bookingPolicy = refrence of data.data
+  const bookingPolicy = data.data;
+  const hotelPackage = bookingPolicy.package;
+  
+  
+  try {
+  // addMarkup method will apply markup and other charges on hotelPackage
+  await addMarkup(hotelPackage);
+  } catch (err) {
+  return res.status(500).json({
+  'message': `${err}`
+  })
+  }
+  
+  
+  const booking_policy = await new BookingPolicy({
+  'booking_policy': bookingPolicy,
+  'search': search,
+  'transaction_identifier': transaction_id,
+  "hotel": hotelId,
+  });
+  
+  
+  await booking_policy.save();
+  
+  
+  res.json(data);
+  } catch (err) {
+    logger.error('BookingPolicy Error:', {
+      error: err.message,
+      stack: err.stack
+    });
+    return res.status(500).json({
+      'message': err.message
+    });
+  }
 };
+
 
 exports.prebook = async (req, res, next) => {
 
-// const search = req.body.search;
-// const booking_policy = req.body.booking_policy;
-// const transaction_id = req.body.transaction_id;
-// const contactDetail = req.body.contactDetail;
-// const hotel = req.body.hotel;
-// const hotelPackage = req.body.package;
-// const coupon = req.body.coupon;
-// const gstDetail = req.body.gstDetail;
+  // const search = req.body.search;
+  // const booking_policy = req.body.booking_policy;
+  // const transaction_id = req.body.transaction_id;
+  // const contactDetail = req.body.contactDetail;
+  // const hotel = req.body.hotel;
+  // const hotelPackage = req.body.package;
+  // const coupon = req.body.coupon;
+  // const gstDetail = req.body.gstDetail;
+  
+  const booking_policy_id = req.body.booking_policy_id;
+  const transaction_id = req.body.transaction_id;
+  const contactDetail = req.body.contactDetail;
+  const coupon = req.body.coupon;
+  const guests = req.body.guest;
+  // const gstDetail = req.body.gstDetail;
+  
+  console.dir(guests);
+  
+  // sanity checking
+  // if (!search || !booking_policy || !guest || !transaction_id || !contactDetail || !hotel || !hotelPackage) {
+  // return res.status(400).json({
+  // 'message': 'Booking cannot be completed! Please try again.'
+  // });
+  // }
+  if (!booking_policy_id || !transaction_id || !contactDetail) {
+  return res.status(400).json({
+  'message': 'Booking cannot be completed! Please try again. booking_policy_id, transaction_id and contactDetail required..'
+  });
+  }
+  
+  contactDetail.mobile = contactDetail.mobile.toString();
+  
+  let isAuth = false;
+  let userId;
+  // check is user is authenticated
+  const authHeader = req.get('Authorization');
+  // console.log(authHeader);
+  if (authHeader) {
+  // Get token string after Bearer
+  const token = authHeader.split(' ')[1];
+  let decodedToken;
+  try {
+  decodedToken = jwt.verify(token, jwtSecret);
+  } catch (err) {
+  console.log(err);
+  }
+  if (decodedToken) {
+  isAuth = true;
+  userId = decodedToken.userId;
+  }
+  }
+  
+  // Handle anonemous user
+  if (!isAuth) {
+  // check if user with this mobile no. already exists
+  const user = await User.findOne({
+  "mobile": contactDetail.mobile
+  });
+  // If user does not exists, create new user
+  if (!user) {
+  // Generate random string of 8 characters
+  // adding two Math.random() will generate string with minimum length of 20.
+  const randomStr = Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 8);
+  
+  const hashedPwd = await bcrypt.hash(randomStr, 12);
+  
+  const name = contactDetail.name;
+  const last_name = contactDetail.last_name;
+  const mobile = contactDetail.mobile;
+  const email = contactDetail.email;
+  const password = hashedPwd;
+  
+  let newUser = await new User({
+  name,
+  last_name,
+  mobile,
+  email,
+  // temporary password for anonymous user
+  password,
+  verified: true
+  });
+  
+  Sms.send("91" + contactDetail.mobile, `Your TripBazaar account has been created. You can login to your account using your mobile No. and password: ${randomStr}`, (data) => {
+  if (data.type != "success") {
+  console.log(`Warning: Hotel prebook - failed to send temporary password to ${contactDetail.name}`);
+  }
+  });
+  await newUser.save();
+  newUser = newUser.toObject();
+  delete newUser.password;
+  userId = newUser._id;
+  } else {
+  // @TODO If user exists with provided mobile no
+  userId = user._id;
+  }
+  }
+  
+  const bookingPolicy = await BookingPolicy.findOne({
+  'booking_policy.booking_policy_id': booking_policy_id,
+  'transaction_identifier': transaction_id
+  }).populate('hotel');
+  
+  if (!bookingPolicy) {
+    logger.error('Booking policy not found:', {
+      booking_policy_id,
+      transaction_identifier: transaction_id
+    });
+    return res.status(404).json({
+      'message': 'Booking policy not found. Please try again.'
+    });
+  }
 
-const booking_policy_id = req.body.booking_policy_id;
-const transaction_id = req.body.transaction_id;
-const contactDetail = req.body.contactDetail;
-const coupon = req.body.coupon;
-const guests = req.body.guest;
-// const gstDetail = req.body.gstDetail;
+  if (!bookingPolicy.booking_policy || !bookingPolicy.booking_policy.package) {
+    logger.error('Invalid booking policy data:', {
+      booking_policy_id,
+      transaction_identifier: transaction_id,
+      has_booking_policy: !!bookingPolicy.booking_policy,
+      has_package: !!bookingPolicy?.booking_policy?.package
+    });
+    return res.status(500).json({
+      'message': 'Invalid booking policy data. Please try again.'
+    });
+  }
 
-console.dir(guests);
-
-// sanity checking
-// if (!search || !booking_policy || !guest || !transaction_id || !contactDetail || !hotel || !hotelPackage) {
-// return res.status(400).json({
-// 'message': 'Booking cannot be completed! Please try again.'
-// });
-// }
-if (!booking_policy_id || !transaction_id || !contactDetail) {
-return res.status(400).json({
-'message': 'Booking cannot be completed! Please try again. booking_policy_id, transaction_id and contactDetail required..'
-});
-}
-
-contactDetail.mobile = contactDetail.mobile.toString();
-
-let isAuth = false;
-let userId;
-// check is user is authenticated
-const authHeader = req.get('Authorization');
-// console.log(authHeader);
-if (authHeader) {
-// Get token string after Bearer
-const token = authHeader.split(' ')[1];
-let decodedToken;
-try {
-decodedToken = jwt.verify(token, jwtSecret);
-} catch (err) {
-console.log(err);
-}
-if (decodedToken) {
-isAuth = true;
-userId = decodedToken.userId;
-}
-}
-
-// Handle anonemous user
-if (!isAuth) {
-// check if user with this mobile no. already exists
-const user = await User.findOne({
-"mobile": contactDetail.mobile
-});
-// If user does not exists, create new user
-if (!user) {
-// Generate random string of 8 characters
-// adding two Math.random() will generate string with minimum length of 20.
-const randomStr = Math.random().toString(36).slice(2, 8) + Math.random().toString(36).slice(2, 8);
-
-const hashedPwd = await bcrypt.hash(randomStr, 12);
-
-const name = contactDetail.name;
-const last_name = contactDetail.last_name;
-const mobile = contactDetail.mobile;
-const email = contactDetail.email;
-const password = hashedPwd;
-
-let newUser = await new User({
-name,
-last_name,
-mobile,
-email,
-// temporary password for anonymous user
-password,
-verified: true
-});
-
-Sms.send("91" + contactDetail.mobile, `Your TripBazaar account has been created. You can login to your account using your mobile No. and password: ${randomStr}`, (data) => {
-if (data.type != "success") {
-console.log(`Warning: Hotel prebook - failed to send temporary password to ${contactDetail.name}`);
-}
-});
-await newUser.save();
-newUser = newUser.toObject();
-delete newUser.password;
-userId = newUser._id;
-} else {
-// @TODO If user exists with provided mobile no
-userId = user._id;
-}
-}
-
-const bookingPolicy = await BookingPolicy.findOne({
-'booking_policy.booking_policy_id': booking_policy_id,
-'transaction_identifier': transaction_id
-}).populate('hotel');
-
-// console.log(bookingPolicy);
-// console.log(bookingPolicy.booking_policy.booking_policy_id);
-
-const hotelPackage = bookingPolicy.booking_policy.package;
-const hotel = bookingPolicy.hotel;
-
-// let chargeable_rate = +hotelPackage.chargeable_rate;
-let baseAmount = +hotelPackage.base_amount;
-let serviceCharge = +hotelPackage.service_charge;
-let processingFee = +hotelPackage.processing_fee;
-let gst = +hotelPackage.gst;
-
-const baseAmountIncDiscount = Math.ceil(baseAmount);
-const clientDiscount = Math.ceil(hotelPackage.guest_discount_percentage ? (hotelPackage.guest_discount_percentage / 100) * baseAmount : 0);
-const baseAmountExcDiscount = baseAmountIncDiscount - clientDiscount;
-const couponDiscount = Math.ceil(coupon.type == 'fixed' ? coupon.value : (coupon.value / 100) * baseAmountIncDiscount);
-
-const totalChargeableAmount = Math.ceil(baseAmountIncDiscount - couponDiscount + serviceCharge + processingFee + gst);
-
-// console.log(totalChargeableAmount, baseAmountIncDiscount, chargeable_rate, baseAmount, serviceCharge, processingFee, gst);
-
-const actual_room_rate = +hotelPackage.room_rate;
-const client_commission = +hotelPackage.client_commission;
-const base_amount_markup_excluded = Math.ceil(actual_room_rate + client_commission);
-const markup_applied = Math.ceil(baseAmount - base_amount_markup_excluded);
-
-const pricing = {
-base_amount_discount_included: baseAmountIncDiscount,
-base_amount_discount_excluded: baseAmountExcDiscount,
-coupon_discount: couponDiscount,
-client_discount: clientDiscount,
-service_charges: serviceCharge,
-processing_fee: processingFee,
-gst: gst,
-total_chargeable_amount: totalChargeableAmount,
-actual_room_rate: actual_room_rate,
-client_commission: client_commission,
-base_amount_markup_excluded: base_amount_markup_excluded,
-markup_applied: markup_applied,
-currency: hotelPackage.chargeable_rate_currency
-};
-
-const transaction = new Transaction();
-
-transaction.userId = userId;
-transaction.search = bookingPolicy.search;
-transaction.booking_policy = bookingPolicy.booking_policy;
-transaction.transaction_identifier = transaction_id;
-transaction.contactDetail = contactDetail;
-transaction.hotel = hotel.toObject();
-transaction.coupon = coupon;
-transaction.hotelPackage = hotelPackage;
-transaction.status = 0;
-transaction.pricing = pricing;
-
-// const payload = {
-// "prebook": {
-// "transaction_identifier": transaction_id,
-// "booking_policy_id": bookingPolicy.booking_policy.booking_policy_id,
-// "guest": {
-// "first_name": contactDetail.name,
-// "last_name": contactDetail.last_name,
-// "contact_no": contactDetail.mobile,
-// "email": contactDetail.email,
-// "nationality": "IN"
-// }
-// }
-// };
-
-// for now passing same same lead guest for every room
-const room_lead_guests = [];
-let room_guests = [];
-
-const roomCount = transaction.search.room_count;
-
-for (let i = 0; i < roomCount; i++) {
-const leadGuest = {
-"first_name": contactDetail.name,
-"last_name": contactDetail.last_name,
-"nationality": "IN"
-}
-room_lead_guests.push(leadGuest);
-}
-
-console.log(room_lead_guests, roomCount)
-
-
-if (guests && guests.length > 0) {
-room_guests = guests.map((guest) => {
-return {
-"first_name": guest.room_guest[0].firstname,
-"last_name": guest.room_guest[0].lastname,
-"contact_no": guest.room_guest[0].mobile,
-"nationality": guest.room_guest[0].nationality
-}
-})
-}
-
-console.log(room_guests, roomCount)
-
-const payload = {
-"prebook": {
-"transaction_identifier": transaction_id,
-"booking_policy_id": bookingPolicy.booking_policy.booking_policy_id,
-"room_lead_guests": room_lead_guests,
-"contact_person": {
-"salutation": "Mr.",
-"first_name": contactDetail.name,
-"last_name": contactDetail.last_name,
-"email": contactDetail.email,
-"contact_no": contactDetail.mobile
-},
-"guests": room_guests
-}
-}
-
-console.log(payload);
-try {
-const data = await Api.hotels.post("/prebook", payload);
-
-console.log('response', data);
-if (data.data && data.data !== undefined) {
-try {
-transaction.prebook_response = data;
-await transaction.save();
-data.transactionid = transaction._id;
-res.json(data);
-} catch (e) {
-console.log(e.message);
-res.status(500).send("Cannot book selected hotel");
-}
-} else {
-console.log('error data.data not found', data);
-console.log('Payload: ', payload);
-res.status(500).send("Cannot book selected hotel!");
-}
-} catch (err) {
-next(err);
-}
-};
+  const hotelPackage = bookingPolicy.booking_policy.package;
+  const hotel = bookingPolicy.hotel;
+  
+  // Get base values from hotel package after markup has been applied
+  let baseAmount = +hotelPackage.base_amount;
+  let serviceComponent = +hotelPackage.service_component;
+  let gst = +hotelPackage.gst;
+  
+  const baseAmountIncDiscount = Math.ceil(baseAmount);
+  const clientDiscount = Math.ceil(hotelPackage.guest_discount_percentage ? (hotelPackage.guest_discount_percentage / 100) * baseAmount : 0);
+  const baseAmountExcDiscount = baseAmountIncDiscount - clientDiscount;
+  const couponDiscount = Math.ceil(coupon.type == 'fixed' ? coupon.value : (coupon.value / 100) * baseAmountIncDiscount);
+  
+  const totalChargeableAmount = Math.ceil(baseAmountIncDiscount - couponDiscount + serviceComponent + gst);
+  
+  const actual_room_rate = +hotelPackage.room_rate;
+  const client_commission = +hotelPackage.client_commission;
+  const base_amount_markup_excluded = Math.ceil(actual_room_rate + client_commission);
+  const markup_applied = Math.ceil(baseAmount - base_amount_markup_excluded);
+  
+  const pricing = {
+    base_amount_discount_included: baseAmountIncDiscount,
+    base_amount_discount_excluded: baseAmountExcDiscount,
+    coupon_discount: couponDiscount,
+    client_discount: clientDiscount,
+    service_component: serviceComponent,
+    gst: gst,
+    total_chargeable_amount: totalChargeableAmount,
+    actual_room_rate: actual_room_rate,
+    client_commission: client_commission,
+    base_amount_markup_excluded: base_amount_markup_excluded,
+    markup_applied: markup_applied,
+    currency: hotelPackage.chargeable_rate_currency
+  };
+  
+  const transaction = new Transaction();
+  
+  transaction.userId = userId;
+  transaction.search = bookingPolicy.search;
+  transaction.booking_policy = bookingPolicy.booking_policy;
+  transaction.transaction_identifier = transaction_id;
+  transaction.contactDetail = contactDetail;
+  transaction.hotel = hotel.toObject();
+  transaction.coupon = coupon;
+  transaction.hotelPackage = hotelPackage;
+  transaction.status = 0;
+  transaction.pricing = pricing;
+  
+  // const payload = {
+  // "prebook": {
+  // "transaction_identifier": transaction_id,
+  // "booking_policy_id": bookingPolicy.booking_policy.booking_policy_id,
+  // "guest": {
+  // "first_name": contactDetail.name,
+  // "last_name": contactDetail.last_name,
+  // "contact_no": contactDetail.mobile,
+  // "email": contactDetail.email,
+  // "nationality": "IN"
+  // }
+  // }
+  // };
+  
+  // for now passing same same lead guest for every room
+  const room_lead_guests = [];
+  let room_guests = [];
+  
+  const roomCount = transaction.search.room_count;
+  
+  for (let i = 0; i < roomCount; i++) {
+  const leadGuest = {
+  "first_name": contactDetail.name,
+  "last_name": contactDetail.last_name,
+  "nationality": "IN"
+  }
+  room_lead_guests.push(leadGuest);
+  }
+  
+  console.log(room_lead_guests, roomCount)
+  
+  
+  if (guests && guests.length > 0) {
+  room_guests = guests.map((guest) => {
+  return {
+  "first_name": guest.room_guest[0].firstname,
+  "last_name": guest.room_guest[0].lastname,
+  "contact_no": guest.room_guest[0].mobile,
+  "nationality": guest.room_guest[0].nationality
+  }
+  })
+  }
+  
+  console.log(room_guests, roomCount)
+  
+  const payload = {
+  "prebook": {
+  "transaction_identifier": transaction_id,
+  "booking_policy_id": bookingPolicy.booking_policy.booking_policy_id,
+  "room_lead_guests": room_lead_guests,
+  "contact_person": {
+  "salutation": "Mr.",
+  "first_name": contactDetail.name,
+  "last_name": contactDetail.last_name,
+  "email": contactDetail.email,
+  "contact_no": contactDetail.mobile
+  },
+  "guests": room_guests
+  }
+  }
+  
+  console.log(payload);
+  try {
+  const data = await Api.hotels.post("/prebook", payload);
+  
+  console.log('response', data);
+  if (data.data && data.data !== undefined) {
+  try {
+  transaction.prebook_response = data;
+  await transaction.save();
+  data.transactionid = transaction._id;
+  res.json(data);
+  } catch (e) {
+  console.log(e.message);
+  res.status(500).send("Cannot book selected hotel");
+  }
+  } else {
+  console.log('error data.data not found', data);
+  console.log('Payload: ', payload);
+  res.status(500).send("Cannot book selected hotel!");
+  }
+  } catch (err) {
+  next(err);
+  }
+  };
+  
 
 exports.transactions = async (req, res, next) => {
 const user = req.body.user;
