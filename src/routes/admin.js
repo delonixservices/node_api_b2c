@@ -72,6 +72,7 @@ const {
   orderStatus,
   orderConfirm,
   // getpaymentoption
+  refundamountcheck
 } = require('../controllers/admin/transactionsController');
 
 const {
@@ -306,4 +307,6 @@ router.get('/meta-search/:id/transactions', getAllVendorTransactions);
 router.get('/getDashboardData',isAdmin, getDashboardData);
 
 // router.post('/get-paymentoption',isAdmin, getpaymentoption);
+
+router.post('/refundamountcheck',isAdmin,refundamountcheck);
 module.exports = router;

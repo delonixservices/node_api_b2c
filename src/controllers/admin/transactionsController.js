@@ -6,16 +6,20 @@ const Mail = require('../../services/mailService');
 const ConfigModel = require('../../models/Config');
 const logger = require('../../config/logger');
 
+
 const {
   generateInvoice
 } = require('../../utils/invoice');
+
 
 const {
   generateVoucher
 } = require('../../utils/voucher');
 
+
 const ccavanue = require('../../utils/ccavanue');
 const jtfd = require('json-to-form-data');
+
 
 const {
   accessCode,
@@ -23,10 +27,13 @@ const {
 } = require('../../config/payment');
 
 
+
+
 exports.allTransactions = async (req, res, next) => {
   const data = await Transaction.find({}).sort({
     created_at: -1
   });
+
 
   // Status
   // 0  initial state
@@ -38,12 +45,16 @@ exports.allTransactions = async (req, res, next) => {
   // 6  payment failed
   // 7  payment refunded
 
+
   const getStatus = ["pending", "success", "cancelled", "payment_pending", "payment_success", "booking_failed", "payment_failed", "refunded"];
+
 
   const allTransactions = [];
 
+
   data.forEach((trans) => {
     let base_amount, service_charges, processing_fee, gst, chargeable_rate;
+
 
     // for old transactions
     if (trans.pricing) {
@@ -59,6 +70,7 @@ exports.allTransactions = async (req, res, next) => {
       processing_fee = 0;
       gst = 0;
     }
+
 
     const newTrans = {
       'id': trans._id,
@@ -78,8 +90,10 @@ exports.allTransactions = async (req, res, next) => {
       'transaction_status': getStatus[trans.status]
     }
 
+
     allTransactions.push(newTrans);
   });
+
 
   res.json({
     "status": 200,
@@ -87,19 +101,23 @@ exports.allTransactions = async (req, res, next) => {
   });
 };
 
+
 exports.getInvoice = async (req, res, next) => {
   const transactionId = req.query.transactionId;
   const transaction = await Transaction.findById(transactionId);
 
+
   if (!transaction) {
     return res.status(404).send('Invalid transactionId');
   }
+
 
   if (transaction.status != 1) {
     return res.status(422).json({
       'message': 'Cannot get invoice for incomplete transaction'
     });
   }
+
 
   let buffer;
   try {
@@ -108,29 +126,36 @@ exports.getInvoice = async (req, res, next) => {
     console.log('Cannot get voucher for the given transaction');
     console.log(err);
 
+
     return res.status(422).json({
       'message': 'Cannot get voucher for the given transaction'
     });
   }
 
+
   res.header('Content-type', 'application/pdf');
   res.send(buffer);
 }
 
+
 exports.getVoucher = async (req, res, next) => {
   const transactionId = req.query.transactionId;
 
+
   const transaction = await Transaction.findById(transactionId);
+
 
   if (!transaction) {
     return res.status(404).send('Invalid transactionId');
   }
+
 
   if (transaction.status != 1) {
     return res.status(422).json({
       'message': 'Cannot get voucher for incomplete transaction'
     });
   }
+
 
   let buffer;
   try {
@@ -139,22 +164,30 @@ exports.getVoucher = async (req, res, next) => {
     console.log('Cannot get voucher for the given transaction');
     console.log(err);
 
+
     return res.status(422).json({
       'message': 'Cannot get voucher for the given transaction'
     });
   }
 
+
   res.header('Content-type', 'application/pdf');
+
 
   res.send(buffer);
 }
 
 
+
+
 exports.sendVoucherInvoice = async (req, res, next) => {
+
 
   const transactionId = req.body.transactionId;
 
+
   let toEmail = req.body.email;
+
 
   let transaction;
   try {
@@ -166,15 +199,18 @@ exports.sendVoucherInvoice = async (req, res, next) => {
     });
   }
 
+
   // if no email provided sent the email to the registered email of the user
   if (!toEmail) {
     toEmail = transaction.contactDetail.email;
   }
 
+
   let invoiceBuffer = await generateInvoice(transaction);
   invoiceBuffer = invoiceBuffer.toString('base64');
   let voucherBuffer = await generateVoucher(transaction);
   voucherBuffer = voucherBuffer.toString('base64');
+
 
   const msg = {
     to: toEmail,
@@ -196,8 +232,10 @@ exports.sendVoucherInvoice = async (req, res, next) => {
     html: `Dear ${transaction.contactDetail.name}, Your Hotel ${transaction.hotel.originalName} has been booked and the booking reference no. is ${transactionId}. Thank you !`,
   };
 
+
   try {
     Mail.send(msg);
+
 
     res.json({
       'message': 'Invoice and Voucher sent to the mail successfully'
@@ -206,6 +244,8 @@ exports.sendVoucherInvoice = async (req, res, next) => {
     console.log("Failed to send mail", err);
   }
 }
+
+
 
 
 exports.orderStatus = async (req, res) => {
@@ -235,6 +275,7 @@ exports.orderStatus = async (req, res) => {
     'version': '1.2'
   };
   console.log(payload);
+
 
   const requestBodyString = jtfd(requestBody);
   logger.info('Refund Order...');
@@ -266,22 +307,28 @@ exports.orderStatus = async (req, res) => {
     'data': decryptResponseObj
   });
 
+
   await transaction.save();
 }
 
+
 exports.orderConfirm = async (req, res) => {
 
+
   const transactionId = req.body.transactionId;
+
 
   const transaction = await Transaction.findOne({
     "_id": transactionId
   });
+
 
   if (!transaction) {
     return res.status(404).json({
       message: "Invalid transaction id, please try again"
     });
   }
+
 
   const payload = {
     "order_List": [{
@@ -290,9 +337,12 @@ exports.orderConfirm = async (req, res) => {
     }]
   }
 
+
   const payloadString = JSON.stringify(payload);
 
+
   const enc_data = ccavanue.encrypt(payloadString, workingKey);
+
 
   const requestBody = {
     'enc_request': enc_data,
@@ -305,21 +355,28 @@ exports.orderConfirm = async (req, res) => {
     'version': '1.1'
   };
 
+
   logger.info(payload);
+
 
   const requestBodyString = jtfd(requestBody);
   logger.info('Confirm Order...');
   logger.info(requestBodyString);
 
+
   const resData = await Api.post('https://apitest.ccavenue.com/apis/servlet/DoWebTrans', requestBodyString);
+
 
   logger.info(resData);
 
+
   const parsedResponse = url.parse("/?" + resData, true).query;
+
 
   logger.info('Order Confirm Response...');
   // logger.info(parsedResponse);
   console.log(parsedResponse);
+
 
   if (parsedResponse.status != 0) {
     return res.status(400).json({
@@ -328,12 +385,16 @@ exports.orderConfirm = async (req, res) => {
     });
   }
 
+
   const decryptResponse = ccavanue.decrypt(parsedResponse.enc_response, workingKey);
+
 
   const decryptResponseObj = JSON.parse(decryptResponse);
 
+
   logger.info('Decrypted Response...');
   console.log(decryptResponseObj);
+
 
   // if (decryptResponseObj.refund_status !== 0) {
   //   return res.json({
@@ -342,11 +403,13 @@ exports.orderConfirm = async (req, res) => {
   //   });
   // }
 
+
   res.json({
     'status': 'success',
     'data': decryptResponseObj
   });
 }
+
 
 // exports.getpaymentoption = async(req,res)=>{
 //   const userid = req.userid;
@@ -381,6 +444,7 @@ exports.orderConfirm = async (req, res) => {
 //   // logger.info(parsedResponse);
 //   console.log(parsedResponse);
 
+
 //   if (parsedResponse.status != 0) {
 //     return res.status(400).json({
 //       'status': 'failed',
@@ -397,9 +461,11 @@ exports.orderConfirm = async (req, res) => {
 //   });
 // }
 
+
 exports.processRefund = async (req, res) => {
   try {
     const transactionId = req.body.transactionId;
+
 
     // Validate transactionId
     if (!transactionId || !require('mongoose').Types.ObjectId.isValid(transactionId)) {
@@ -409,12 +475,14 @@ exports.processRefund = async (req, res) => {
       });
     }
 
+
     const transaction = await Transaction.findOne({ _id: transactionId });
     if (!transaction) {
       return res.status(404).json({
         message: "Invalid transaction id, please try again"
       });
     }
+
 
     // Check if transaction is already refunded
     if (transaction.status === 7 || transaction.refunded) {
@@ -423,6 +491,7 @@ exports.processRefund = async (req, res) => {
         message: 'Refund has already been processed for this transaction.',
       });
     }
+
 
     // Fetch the latest config for refund calculation
     const config = await ConfigModel.findOne().sort({ updated_at: -1 });
@@ -433,6 +502,7 @@ exports.processRefund = async (req, res) => {
       });
     }
 
+
     // Calculate custom refund amount
     const calculateRefund = (transaction, config) => {
       const amount = transaction.pricing.total_chargeable_amount;
@@ -440,7 +510,9 @@ exports.processRefund = async (req, res) => {
       const processingFee = transaction.pricing.processing_fee || config.processing_fee || 0;
       const serviceCharge = transaction.pricing.service_charges || config.service_charge.value || 0;
 
+
       logger.info('Processing refund for transaction:', { amount, gst, processingFee, serviceCharge });
+
 
       let cancelCharge = 0;
       const cancelChargeconfig = config.cancellation_charge;
@@ -450,8 +522,10 @@ exports.processRefund = async (req, res) => {
         cancelCharge = cancelChargeconfig.value;
       }
 
+
       const refundAmount = amount - gst - processingFee - serviceCharge - cancelCharge;
       logger.info('Calculated Refund Amount:', { refundAmount });
+
 
       return {
         refundAmount,
@@ -465,7 +539,9 @@ exports.processRefund = async (req, res) => {
       };
     };
 
+
     const { refundAmount, details } = calculateRefund(transaction, config);
+
 
     if (refundAmount <= 0) {
       return res.status(400).json({
@@ -474,15 +550,18 @@ exports.processRefund = async (req, res) => {
       });
     }
 
+
     const payload = {
       "reference_no": transaction.payment_response.tracking_id,
       "refund_amount": refundAmount,
       "refund_ref_no": transaction.payment_response.order_id,
     };
 
+
     logger.info('Preparing refund payload:', payload);
     const payloadString = JSON.stringify(payload);
     const enc_data = ccavanue.encrypt(payloadString, workingKey);
+
 
     const requestBody = {
       'enc_request': enc_data,
@@ -496,8 +575,10 @@ exports.processRefund = async (req, res) => {
       'version': '1.1'
     };
 
+
     logger.info('Sending refund request to CCAvenue:', { requestBody });
     const requestBodyString = jtfd(requestBody);
+
 
     // Log refund attempt
     transaction.refund_attempts = transaction.refund_attempts || [];
@@ -509,6 +590,7 @@ exports.processRefund = async (req, res) => {
       status: 'pending',
     });
     await transaction.save();
+
 
     // Call CCAvenue refund API
     let resData;
@@ -527,9 +609,11 @@ exports.processRefund = async (req, res) => {
       });
     }
 
+
     logger.info('Raw CCAvenue API Response:', { data: resData });
     const parsedResponse = url.parse("/?" + resData, true).query;
     logger.info('OrderRefund Response:', parsedResponse);
+
 
     if (parsedResponse.status != 0) {
       return res.status(400).json({
@@ -538,14 +622,17 @@ exports.processRefund = async (req, res) => {
       });
     }
 
+
     const decryptResponse = ccavanue.decrypt(parsedResponse.enc_response, workingKey);
     const decryptResponseObj = JSON.parse(decryptResponse);
     logger.info('Decrypted Response:', decryptResponseObj);
+
 
     // Update refund attempt status
     const refundAttempt = transaction.refund_attempts[transaction.refund_attempts.length - 1];
     refundAttempt.status = decryptResponseObj.refund_status === 0 ? 'success' : 'failed';
     refundAttempt.response = decryptResponseObj;
+
 
     if (decryptResponseObj.refund_status !== 0) {
       logger.error('Refund request failed:', { decryptResponseObj });
@@ -557,11 +644,13 @@ exports.processRefund = async (req, res) => {
       });
     }
 
+
     // Update transaction status
     transaction.status = 7; // refunded
     transaction.refunded = true;
     transaction.refund_response = decryptResponseObj;
     await transaction.save();
+
 
     // Log changes to config changeHistory
     await ConfigModel.findByIdAndUpdate(
@@ -586,6 +675,7 @@ exports.processRefund = async (req, res) => {
       { new: true }
     );
 
+
     return res.json({
       'status': 'success',
       'message': `Refund of ₹${refundAmount.toFixed(2)} has been processed successfully`,
@@ -606,6 +696,7 @@ exports.processRefund = async (req, res) => {
       }
     });
 
+
   } catch (error) {
     logger.error('Error processing refund:', {
       error: error.message,
@@ -618,3 +709,79 @@ exports.processRefund = async (req, res) => {
     });
   }
 };
+
+
+exports.refundamountcheck = async (req, res) => {
+  try {
+    const transactionId = req.body.transactionId;
+    // Validate transactionId
+    if (!transactionId || !require('mongoose').Types.ObjectId.isValid(transactionId)) {
+      return res.status(400).json({
+        status: 'failed',
+        message: 'Invalid transaction ID format',
+      });
+    }
+    const transaction = await Transaction.findOne({ _id: transactionId });
+    if (!transaction) {
+      return res.status(404).json({
+        message: "Invalid transaction id, please try again"
+      });
+    }
+
+
+    // Check if transaction is already refunded
+    if (transaction.status === 7 || transaction.refunded) {
+      return res.status(400).json({
+        status: 'failed',
+        message: 'Refund has already been processed for this transaction.',
+      });
+    }
+
+
+    // Fetch the latest config for refund calculation
+    const config = await ConfigModel.findOne().sort({ updated_at: -1 });
+    if (!config) {
+      return res.status(500).json({
+        status: 'failed',
+        message: 'Configuration not found in the database',
+      });
+    }
+      const amount = transaction.pricing.total_chargeable_amount;
+      const baseamount = transaction.prebook.data
+      const gst = transaction.pricing.gst || 0;
+      // const processingFee = transaction.pricing.processing_fee || config.processing_fee || 0;
+      // const serviceCharge = transaction.pricing.service_charges || config.service_charge.value || 0;
+      logger.info('Processing refund for transaction:', { amount, gst, processingFee, serviceCharge });
+
+
+      let cancelCharge = 0;
+      const cancelChargeconfig = config.cancellation_charge;
+      if (cancelChargeconfig.type === 'percentage') {
+        cancelCharge = (amount * cancelChargeconfig.value) / 100;
+      } else if (cancelChargeconfig.type === 'fixed') {
+        cancelCharge = cancelChargeconfig.value;
+      }
+
+
+      const refundAmount =
+       amount - gst - processingFee - serviceCharge - cancelCharge;
+      logger.info('Calculated Refund Amount:', { refundAmount });
+
+
+            res.json({
+              refundAmount,
+              amount,
+              gst,
+              processingFee,
+              serviceCharge,
+              cancelCharge,
+            });
+  } catch (error) {
+    error.message = error.message || 'An error occurred while processing the refund amount check.';
+      res.status(500).json({
+        status: 'failed',
+        message: error.message,
+      });
+    }
+  }
+
