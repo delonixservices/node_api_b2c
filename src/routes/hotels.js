@@ -11,7 +11,8 @@ const {
   cancelBooking,
   invoice,
   voucher,
-  details
+  details,
+  getRefundDetails
 } = require('../controllers/hotelsController');
 
 const {
@@ -41,6 +42,16 @@ router.post('/cancel', isAuth, cancelBooking);
 router.get('/invoice', isAuth, invoice);
 
 router.get('/voucher', isAuth, voucher);
+
+// refund details route
+router.get('/refund-details', isAuth, (req, res, next) => {
+  console.log('Refund details route hit:', {
+    query: req.query,
+    user: req.user,
+    path: req.path
+  });
+  getRefundDetails(req, res, next);
+});
 
 // payment routes
 

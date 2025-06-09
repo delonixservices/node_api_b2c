@@ -1135,8 +1135,6 @@ return res.status(403).json({
 });
 }
 
-
-
 const data = await Transaction.find({
 $and: [{
 "userId": {
@@ -1452,3 +1450,57 @@ return res.status(422).json({
 res.header('Content-type', 'application/pdf');
 res.send(buffer);
 }
+
+exports.getRefundDetails = async (req, res, next) => {
+  try {
+    const transactionId = req.query.transactionId;
+    
+    // Validate transaction ID
+    if (!transactionId) {
+      return res.status(400).json({
+        message: 'Transaction ID is required'
+      });
+    }
+
+    // Find transaction and verify user authorization
+    const transaction = await Transaction.findOne({
+      _id: transactionId,
+      userId: req.user._id
+    });
+
+    if (!transaction) {
+      return res.status(404).json({
+        message: 'Transaction not found or unauthorized access'
+      });
+    }
+
+    // Check if payment response exists
+    if (!transaction.payment_response) {
+      return res.status(404).json({
+        message: 'Payment details not found for this transaction'
+      });
+    }
+
+    // Extract relevant payment details for refund
+    const paymentDetails = {
+      bank_ref_no: transaction.payment_response.bank_ref_no,
+      payment_mode: transaction.payment_response.payment_mode,
+      card_name: transaction.payment_response.card_name,
+      // Add cancellation timestamp if transaction is cancelled
+      cancelled_at: transaction.status === 2 ? transaction.updatedAt : null,
+      cancellation_status: transaction.status === 2 ? 'Cancelled' : 'Not Cancelled'
+    };
+
+    return res.status(200).json({
+      status: 'success',
+      data: paymentDetails
+    });
+
+  } catch (err) {
+    logger.error('Error in getRefundDetails:', err);
+    return res.status(500).json({
+      message: 'Internal server error while fetching refund details'
+    });
+  }
+};
+

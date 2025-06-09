@@ -58,18 +58,18 @@ exports.allTransactions = async (req, res, next) => {
 
     // for old transactions
     if (trans.pricing) {
-      base_amount = trans.pricing.base_amount_discount_included;
+      base_amount = trans.pricing.total_chargeable_amount;
       chargeable_rate = trans.pricing.total_chargeable_amount;
-      service_charges = trans.pricing.service_charges || 0;
-      processing_fee = trans.pricing.processing_fee || 0;
+      service_component = trans.pricing.service_component || 0;
       gst = trans.pricing.gst || 0;
     } else {
       base_amount = trans.prebook_response.data.package.chargeable_rate;
       chargeable_rate = trans.prebook_response.data.package.chargeable_rate;
-      service_charges = 0;
-      processing_fee = 0;
+      service_component = 0;
       gst = 0;
     }
+
+
 
 
     const newTrans = {
@@ -83,8 +83,7 @@ exports.allTransactions = async (req, res, next) => {
       'last_name': trans.contactDetail.last_name,
       'coupon_used': trans.coupon.code ? trans.coupon.code : "-",
       'base_amount': Math.round(base_amount * 100) / 100,
-      'service_charges': Math.round(service_charges * 100) / 100,
-      'processing_fee': Math.round(processing_fee * 100) / 100,
+      'service_component': Math.round(service_component * 100) / 100,
       'gst': Math.round(gst * 100) / 100,
       'chargeable_rate': Math.round(chargeable_rate * 100) / 100,
       'transaction_status': getStatus[trans.status]
@@ -505,51 +504,66 @@ exports.processRefund = async (req, res) => {
 
     // Calculate custom refund amount
     const calculateRefund = (transaction, config) => {
-      const amount = transaction.pricing.total_chargeable_amount;
+      const base_amount = transaction.pricing.total_chargeable_amount;
       const gst = transaction.pricing.gst || 0;
-      const processingFee = transaction.pricing.processing_fee || config.processing_fee || 0;
-      const serviceCharge = transaction.pricing.service_charges || config.service_charge.value || 0;
+      const service_component = transaction.pricing.service_component || 0;
 
-
-      logger.info('Processing refund for transaction:', { amount, gst, processingFee, serviceCharge });
-
-
-      let cancelCharge = 0;
-      const cancelChargeconfig = config.cancellation_charge;
-      if (cancelChargeconfig.type === 'percentage') {
-        cancelCharge = (amount * cancelChargeconfig.value) / 100;
-      } else if (cancelChargeconfig.type === 'fixed') {
-        cancelCharge = cancelChargeconfig.value;
+      // Get current date and check-in date
+      const currentDate = new Date();
+      const checkInDate = new Date(transaction.prebook_response.data.package.check_in_date);
+      
+      // Find applicable cancellation policy
+      let penaltyPercentage = 0;
+      let applicablePolicy = null;
+      if (transaction.hotel.cancellation_policies && transaction.hotel.cancellation_policies.length > 0) {
+        for (const policy of transaction.hotel.cancellation_policies) {
+          const fromDate = new Date(policy.date_from);
+          const toDate = new Date(policy.date_to);
+          
+          if (currentDate >= fromDate && currentDate <= toDate) {
+            penaltyPercentage = policy.penalty_percentage;
+            applicablePolicy = policy;
+            break;
+          }
+        }
       }
 
+      // Calculate penalty amount
+      const penaltyAmount = (base_amount * penaltyPercentage) / 100;
+      
+      // Calculate final refund amount
+      const amount = base_amount - gst - service_component;
+      const refundAmount = amount - penaltyAmount;
 
-      const refundAmount = amount - gst - processingFee - serviceCharge - cancelCharge;
-      logger.info('Calculated Refund Amount:', { refundAmount });
-
+      logger.info('Processing refund for transaction:', { 
+        base_amount,
+        gst,
+        service_component,
+        penaltyPercentage,
+        penaltyAmount,
+        refundAmount
+      });
 
       return {
-        refundAmount,
+        refundAmount: Math.max(0, refundAmount), // Ensure refund amount is not negative
         details: {
-          amount,
+          amount: base_amount,
           gst,
-          processingFee,
-          serviceCharge,
-          cancelCharge,
-        },
+          service_component,
+          penaltyPercentage,
+          penaltyAmount,
+          netRefundAmount: Math.max(0, refundAmount)
+        }
       };
     };
 
-
     const { refundAmount, details } = calculateRefund(transaction, config);
-
-
     if (refundAmount <= 0) {
       return res.status(400).json({
         status: 'failed',
         message: 'Refund amount is invalid or zero.',
       });
     }
-
 
     const payload = {
       "reference_no": transaction.payment_response.tracking_id,
@@ -651,31 +665,6 @@ exports.processRefund = async (req, res) => {
     transaction.refund_response = decryptResponseObj;
     await transaction.save();
 
-
-    // Log changes to config changeHistory
-    await ConfigModel.findByIdAndUpdate(
-      config._id,
-      {
-        $push: {
-          changeHistory: {
-            changedBy: {
-              ip: req.ip,
-              userId: req.user?._id || null,
-            },
-            changes: {
-              refundProcessed: {
-                transactionId,
-                refundAmount,
-                details,
-              },
-            },
-          },
-        },
-      },
-      { new: true }
-    );
-
-
     return res.json({
       'status': 'success',
       'message': `Refund of ₹${refundAmount.toFixed(2)} has been processed successfully`,
@@ -684,10 +673,10 @@ exports.processRefund = async (req, res) => {
         refundDetails: {
           originalAmount: details.amount.toFixed(2),
           gst: details.gst.toFixed(2),
-          processingFee: details.processingFee.toFixed(2),
-          serviceCharge: details.serviceCharge.toFixed(2),
-          cancellationCharge: details.cancelCharge.toFixed(2),
-          netRefundAmount: refundAmount.toFixed(2)
+          serviceComponent: details.service_component.toFixed(2),
+          penaltyPercentage: details.penaltyPercentage.toFixed(2),
+          penaltyAmount: details.penaltyAmount.toFixed(2),
+          netRefundAmount: details.netRefundAmount.toFixed(2)
         },
         transactionId: transactionId,
         hotelName: transaction.hotel.name,
@@ -695,8 +684,6 @@ exports.processRefund = async (req, res) => {
         refundResponse: decryptResponseObj
       }
     });
-
-
   } catch (error) {
     logger.error('Error processing refund:', {
       error: error.message,
@@ -721,13 +708,13 @@ exports.refundamountcheck = async (req, res) => {
         message: 'Invalid transaction ID format',
       });
     }
+
     const transaction = await Transaction.findOne({ _id: transactionId });
     if (!transaction) {
       return res.status(404).json({
         message: "Invalid transaction id, please try again"
       });
     }
-
 
     // Check if transaction is already refunded
     if (transaction.status === 7 || transaction.refunded) {
@@ -737,51 +724,73 @@ exports.refundamountcheck = async (req, res) => {
       });
     }
 
+    const base_amount = transaction.pricing.total_chargeable_amount;
+    const gst = transaction.pricing.gst || 0;
+    const service_component = transaction.pricing.service_component || 0;
 
-    // Fetch the latest config for refund calculation
-    const config = await ConfigModel.findOne().sort({ updated_at: -1 });
-    if (!config) {
-      return res.status(500).json({
-        status: 'failed',
-        message: 'Configuration not found in the database',
-      });
-    }
-      const amount = transaction.pricing.total_chargeable_amount;
-      const baseamount = transaction.prebook.data
-      const gst = transaction.pricing.gst || 0;
-      // const processingFee = transaction.pricing.processing_fee || config.processing_fee || 0;
-      // const serviceCharge = transaction.pricing.service_charges || config.service_charge.value || 0;
-      logger.info('Processing refund for transaction:', { amount, gst, processingFee, serviceCharge });
-
-
-      let cancelCharge = 0;
-      const cancelChargeconfig = config.cancellation_charge;
-      if (cancelChargeconfig.type === 'percentage') {
-        cancelCharge = (amount * cancelChargeconfig.value) / 100;
-      } else if (cancelChargeconfig.type === 'fixed') {
-        cancelCharge = cancelChargeconfig.value;
+    // Get current date and check-in date
+    const currentDate = new Date();
+    const checkInDate = new Date(transaction.prebook_response.data.package.check_in_date);
+    
+    // Find applicable cancellation policy
+    let penaltyPercentage = 0;
+    let applicablePolicy = null;
+    if (transaction.hotel.cancellation_policies && transaction.hotel.cancellation_policies.length > 0) {
+      for (const policy of transaction.hotel.cancellation_policies) {
+        const fromDate = new Date(policy.date_from);
+        const toDate = new Date(policy.date_to);
+        
+        if (currentDate >= fromDate && currentDate <= toDate) {
+          penaltyPercentage = policy.penalty_percentage;
+          applicablePolicy = policy;
+          break;
+        }
       }
-
-
-      const refundAmount =
-       amount - gst - processingFee - serviceCharge - cancelCharge;
-      logger.info('Calculated Refund Amount:', { refundAmount });
-
-
-            res.json({
-              refundAmount,
-              amount,
-              gst,
-              processingFee,
-              serviceCharge,
-              cancelCharge,
-            });
-  } catch (error) {
-    error.message = error.message || 'An error occurred while processing the refund amount check.';
-      res.status(500).json({
-        status: 'failed',
-        message: error.message,
-      });
     }
+
+    // Calculate penalty amount
+    const penaltyAmount = (base_amount * penaltyPercentage) / 100;
+    
+    // Calculate final refund amount
+    const amount = base_amount - gst - service_component;
+    const refundAmount = Math.max(0, amount - penaltyAmount);
+
+    logger.info('Calculating refund amount for transaction:', { 
+      base_amount,
+      gst,
+      service_component,
+      penaltyPercentage,
+      penaltyAmount,
+      refundAmount
+    });
+
+    res.json({
+      status: 'success',
+      data: {
+        baseAmount: base_amount.toFixed(2),
+        gst: gst.toFixed(2),
+        serviceComponent: service_component.toFixed(2),
+        applicablePolicy: applicablePolicy ? {
+          penaltyPercentage: applicablePolicy.penalty_percentage,
+          dateFrom: applicablePolicy.date_from,
+          dateTo: applicablePolicy.date_to
+        } : null,
+        penaltyAmount: penaltyAmount.toFixed(2),
+        refundAmount: refundAmount.toFixed(2),
+        checkInDate: transaction.prebook_response.data.package.check_in_date,
+        currentDate: currentDate.toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Error calculating refund amount:', {
+      error: error.message,
+      stack: error.stack,
+    });
+    res.status(500).json({
+      status: 'failed',
+      message: 'An error occurred while calculating the refund amount.',
+      error: error.message,
+    });
   }
+};
 
