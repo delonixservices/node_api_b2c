@@ -1,6 +1,15 @@
 const Coupon = require('../../models/Coupon');
 const logger = require('../../config/logger');
 
+/**
+ * Add a new coupon
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing coupon details (name, code, value, type, etc.)
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Creates a new coupon with validation for duplicate coupon codes
+ * @returns {Object} Created coupon data
+ */
 exports.addCoupon = async (req, res, next) => {
 
   const name = req.body.name;
@@ -46,6 +55,15 @@ exports.addCoupon = async (req, res, next) => {
   });
 };
 
+/**
+ * Get all coupons
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Retrieves all coupons sorted by creation date in descending order
+ * @returns {Object} List of all coupons
+ */
 exports.allCoupons = async (req, res, next) => {
   const coupons = await Coupon.find({}).sort("-created_at");
   res.json({
@@ -54,6 +72,15 @@ exports.allCoupons = async (req, res, next) => {
   });
 };
 
+/**
+ * Edit existing coupon
+ * Updated by: Amber Bisht
+ * @param {Object} req - Request object containing coupon details to update
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Updates coupon details including validity period, value, and type
+ * @returns {Object} Updated coupon data
+ */
 exports.editCoupon = async (req, res, next) => {
   const id = req.body._id;
   const name = req.body.name;
@@ -95,6 +122,15 @@ exports.editCoupon = async (req, res, next) => {
   });
 };
 
+/**
+ * Delete a coupon
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing coupon ID in query
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Removes a coupon from the database
+ * @returns {Object} Deleted coupon data or error message
+ */
 exports.deleteCoupon = async (req, res, next) => {
   const id = req.query.id;
   const coupon = await Coupon.findOneAndDelete({

@@ -29,6 +29,15 @@ const {
 
 
 
+/**
+ * Get all transactions
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Retrieves all transactions with formatted data including status mapping
+ * @returns {Object} List of transactions with detailed information
+ */
 exports.allTransactions = async (req, res, next) => {
   const data = await Transaction.find({}).sort({
     created_at: -1
@@ -101,6 +110,15 @@ exports.allTransactions = async (req, res, next) => {
 };
 
 
+/**
+ * Get transaction invoice
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing transactionId
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Generates and returns PDF invoice for a transaction
+ * @returns {Buffer} PDF invoice file
+ */
 exports.getInvoice = async (req, res, next) => {
   const transactionId = req.query.transactionId;
   const transaction = await Transaction.findById(transactionId);
@@ -137,6 +155,15 @@ exports.getInvoice = async (req, res, next) => {
 }
 
 
+/**
+ * Get transaction voucher
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing transactionId
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Generates and returns PDF voucher for a transaction
+ * @returns {Buffer} PDF voucher file
+ */
 exports.getVoucher = async (req, res, next) => {
   const transactionId = req.query.transactionId;
 
@@ -179,6 +206,15 @@ exports.getVoucher = async (req, res, next) => {
 
 
 
+/**
+ * Send voucher and invoice via email
+ * Updated by: Amber Bisht
+ * @param {Object} req - Request object containing transactionId and optional email
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Sends booking confirmation with attached invoice and voucher
+ * @returns {Object} Success message
+ */
 exports.sendVoucherInvoice = async (req, res, next) => {
 
 
@@ -247,6 +283,14 @@ exports.sendVoucherInvoice = async (req, res, next) => {
 
 
 
+/**
+ * Check order status
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing transactionId
+ * @param {Object} res - Response object
+ * @description Checks payment status with CCAvenue payment gateway
+ * @returns {Object} Order status details
+ */
 exports.orderStatus = async (req, res) => {
   const transactionId = req.body.transactionId;
   const transaction = await Transaction.findOne({
@@ -311,6 +355,14 @@ exports.orderStatus = async (req, res) => {
 }
 
 
+/**
+ * Confirm order
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing transactionId
+ * @param {Object} res - Response object
+ * @description Confirms order with CCAvenue payment gateway
+ * @returns {Object} Order confirmation details
+ */
 exports.orderConfirm = async (req, res) => {
 
 
@@ -461,6 +513,14 @@ exports.orderConfirm = async (req, res) => {
 // }
 
 
+/**
+ * Process refund for a transaction
+ * Updated by: Amber Bisht
+ * @param {Object} req - Request object containing transactionId
+ * @param {Object} res - Response object
+ * @description Processes refund through CCAvenue with cancellation policy calculation
+ * @returns {Object} Refund status and details
+ */
 exports.processRefund = async (req, res) => {
   try {
     const transactionId = req.body.transactionId;
@@ -698,6 +758,14 @@ exports.processRefund = async (req, res) => {
 };
 
 
+/**
+ * Calculate refund amount
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing transactionId
+ * @param {Object} res - Response object
+ * @description Calculates refund amount based on cancellation policy and transaction details
+ * @returns {Object} Refund calculation details
+ */
 exports.refundamountcheck = async (req, res) => {
   try {
     const transactionId = req.body.transactionId;

@@ -1351,6 +1351,13 @@ console.log(`Warning: Hotel cancel - failed to send canellation message to the a
 };
 
 
+/**
+ * Get transaction details
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ */
 exports.details = async (req,res,next)=>{
   const transactionid = req.query.transactionid;
   const transaction = await Transaction.findById(transactionid);
@@ -1451,6 +1458,14 @@ res.header('Content-type', 'application/pdf');
 res.send(buffer);
 }
 
+/**
+ * Get refund details for a transaction
+ * Updated by: Amber Bisht
+ * @param {Object} req - Request object containing transactionId in query
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @returns {Object} Payment details for refund processing
+ */
 exports.getRefundDetails = async (req, res, next) => {
   try {
     const transactionId = req.query.transactionId;

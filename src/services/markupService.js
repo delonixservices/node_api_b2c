@@ -1,9 +1,34 @@
+/**
+ * Markup Service
+ * Updated by: Amber Bisht
+ * @description Service for handling markup calculations, GST, and service charges for hotel bookings
+ * This service manages the complex pricing calculations including:
+ * - Base amount markup (percentage or fixed)
+ * - GST calculations (18%)
+ * - Service component calculations
+ * - Processing fee additions
+ * All calculations are done with proper rounding and error handling
+ */
+
 const Config = require('../models/Config');
 const logger = require('../config/logger');
 
 module.exports = {
-  // addMarkup will modify the hotelPackage data with latest markup
+  /**
+   * Apply markup and additional charges to hotel package
+   * Updated by: Amber Bisht
+   * @param {Object} hotelPackage - Hotel package object to modify
+   * @throws {Error} If hotel package is missing or calculation fails
+   * @description Applies the following calculations in sequence:
+   * 1. Base amount markup (percentage or fixed)
+   * 2. GST on base amount (18%)
+   * 3. Service component (percentage or fixed)
+   * 4. Processing fee addition
+   * 5. GST on service component (18%)
+   * All amounts are rounded to 2 decimal places
+   */
   addMarkup: async (hotelPackage) => {
+    // Validate input
     if (!hotelPackage) {
       const err = 'No hotel package found to apply markup at markupService.js';
       logger.error(err);
@@ -13,29 +38,32 @@ module.exports = {
     let baseAmount = hotelPackage.chargeable_rate;
     let config = await Config.findOne({});
 
+    // Validate config
     if (!config || !config.markup) {
       logger.info('Cannot find any document in the config collection. at markupService.js');
       return;
     }
 
     try {
-      // Calculate base amount with markup
+      // Only proceed if both base amount and markup value are positive
       if (baseAmount > 0 && config.markup.value > 0) {
         let markup = 0;
+        
+        // Calculate markup based on type (percentage or fixed)
         if (config.markup.type === 'percentage') {
           markup = (config.markup.value / 100) * baseAmount;
         } else if (config.markup.type === 'fixed') {
           markup = config.markup.value;
         }
         
-        // First add base amount and markup
+        // Step 1: Add markup to base amount
         baseAmount = baseAmount + markup;
         
-        // Then apply 18% GST on the total
+        // Step 2: Apply 18% GST on the total base amount
         const hotelGst = (18 / 100) * baseAmount;
         baseAmount = baseAmount + hotelGst;
 
-        // Calculate service component
+        // Step 3: Calculate service component
         let serviceComponent = 0;
         if (config.service_charge.value > 0) {
           if (config.service_charge.type === 'percentage') {
@@ -45,20 +73,28 @@ module.exports = {
           }
         }
 
-        // Add processing fee to service component
+        // Step 4: Add processing fee to service component
         if (config.processing_fee > 0) {
           serviceComponent += config.processing_fee;
         }
 
-        // Apply GST on service component
+        // Step 5: Apply GST on service component
         const serviceGst = (18 / 100) * serviceComponent;
         serviceComponent = serviceComponent + serviceGst;
 
-        // Update hotel package with new values
+        // Update hotel package with calculated values
+        // All values are rounded to 2 decimal places
         hotelPackage.base_amount = +baseAmount.toFixed(2);
         hotelPackage.service_component = +serviceComponent.toFixed(2);
         hotelPackage.gst = +(hotelGst + serviceGst).toFixed(2);
         hotelPackage.chargeable_rate = +(baseAmount + serviceComponent).toFixed(2);
+
+        logger.info('Markup calculation completed successfully', {
+          baseAmount: hotelPackage.base_amount,
+          serviceComponent: hotelPackage.service_component,
+          gst: hotelPackage.gst,
+          totalChargeable: hotelPackage.chargeable_rate
+        });
       }
     } catch (err) {
       logger.error('Error in markup calculation:', err);
@@ -66,6 +102,13 @@ module.exports = {
     }
   },
 
+  /**
+   * Get current markup configuration
+   * Updated by: Amber Bisht
+   * @returns {Object} Current markup configuration
+   * @throws {Error} If config or markup settings are not found
+   * @description Retrieves the current markup settings from config
+   */
   getMarkup: async () => {
     const config = await Config.findOne({});
     if (!config || !config.markup) {

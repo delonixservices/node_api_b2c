@@ -2,6 +2,15 @@ const Config = require('../../models/Config');
 // const Api = require('../../services/apiService');
 // const User = require('../../models/User');
 
+/**
+ * Get system configuration
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Retrieves the current system configuration including markup, service charges, and fees
+ * @returns {Object} Current configuration data
+ */
 exports.getConfig = async (req, res, next) => {
   const config = await Config.findOne({});
 
@@ -17,6 +26,16 @@ exports.getConfig = async (req, res, next) => {
   });
 }
 
+/**
+ * Update system configuration
+ * Updated by: Amber Bisht
+ * @param {Object} req - Request object containing configuration updates
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Updates system configuration including markup, service charges, processing fees, and cancellation charges
+ * @returns {Object} Updated configuration data
+ * @throws {Error} Validation errors for negative values or missing required fields
+ */
 exports.editConfig = async (req, res, next) => {
   const markup = req.body.markup;
   const serviceCharge = req.body.serviceCharge;

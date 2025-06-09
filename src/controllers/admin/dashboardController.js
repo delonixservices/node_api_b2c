@@ -2,6 +2,22 @@ const Coupon = require('../../models/Coupon');
 const User = require('../../models/User');
 const HotelTransaction = require('../../models/HotelTransaction');
 
+/**
+ * Get dashboard statistics and metrics
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Retrieves comprehensive dashboard data including user counts, coupon counts,
+ * transaction statistics, and booking metrics. Uses parallel processing for efficient data fetching.
+ * @returns {Object} Dashboard statistics including:
+ *   - totalUsers: Total number of registered users
+ *   - totalCoupons: Total number of active coupons
+ *   - totalHotelTransactions: Total number of hotel transactions
+ *   - totalMoney: Total revenue from successful bookings
+ *   - totalBookingsWithStatus1: Count of successful bookings
+ *   - avgPrice: Average booking price
+ */
 exports.getDashboardData = async (req, res, next) => {
   try {
     // Fetch all counts and aggregations in parallel

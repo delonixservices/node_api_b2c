@@ -13,6 +13,15 @@ const {
 
 // const randtoken = require('rand-token');
 
+/**
+ * Register a new admin user
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing admin details (email, mobile, password)
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Creates a new admin user with password hashing and validation
+ * @returns {Object} Created admin ID and success message
+ */
 exports.register = async (req, res, next) => {
   try {
     const errors = validationResult(req);
@@ -46,6 +55,15 @@ exports.register = async (req, res, next) => {
   }
 }
 
+/**
+ * Admin login
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing login credentials
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Authenticates admin user and generates JWT token
+ * @returns {Object} JWT token and admin details
+ */
 exports.login = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -102,6 +120,15 @@ exports.login = async (req, res, next) => {
   }
 };
 
+/**
+ * Admin logout
+ * Updated by: Amber Bisht
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Handles admin logout process
+ * @returns {Object} Success message
+ */
 exports.logout = async (req, res, next) => {
   // const errors = validationResult(req);
   // if (!errors.isEmpty()) {
@@ -144,6 +171,15 @@ exports.logout = async (req, res, next) => {
 
 // }
 
+/**
+ * Get all users
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Retrieves list of all users with selected fields
+ * @returns {Object} List of users with basic information
+ */
 exports.allUsers = async (req, res, next) => {
   const users = await User.find({}, {
     '_id': 1,
@@ -161,6 +197,15 @@ exports.allUsers = async (req, res, next) => {
   });
 };
 
+/**
+ * Update user details
+ * Updated by: Amber Bisht
+ * @param {Object} req - Request object containing user details to update
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Updates user information excluding password
+ * @returns {Object} Updated user data
+ */
 exports.updateUser = async (req, res, next) => {
   const userId = req.body._id;
   const name = req.body.name;

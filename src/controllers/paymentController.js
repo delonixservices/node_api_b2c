@@ -25,6 +25,15 @@ const voucher = require('../utils/voucher');
 
 const logger = require('../config/logger');
 
+/**
+ * Process payment for hotel booking
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing booking ID in params
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Handles payment processing through CCAvenue payment gateway
+ * @returns {String} HTML form for payment gateway redirect
+ */
 exports.processPayment = async (req, res, next) => {
 
   if (!req.params.id) {
@@ -114,6 +123,16 @@ exports.processPayment = async (req, res, next) => {
 
 };
 
+/**
+ * Handle payment response from payment gateway
+ * Updated by: Amber Bisht
+ * @param {Object} req - Request object containing payment response data
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Processes payment response, updates booking status, sends notifications
+ * and generates booking documents (invoice/voucher)
+ * @returns {void} Redirects to success/failure page based on payment status
+ */
 exports.paymentResponseHandler = async (req, res, next) => {
   console.log('Payment response...');
   console.log(req.body);

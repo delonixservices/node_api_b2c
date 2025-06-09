@@ -8,6 +8,15 @@ const { baseUrl, clientUrl } = require('../../config/index');
 const Payment = require('../../models/Payment');
 const url = require('url');
 
+/**
+ * Generate payment link
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing payment details
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Creates a new payment record and generates unique payment ID
+ * @returns {Object} Payment ID for processing
+ */
 exports.generatePayment = async (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -37,7 +46,15 @@ exports.generatePayment = async (req, res, next) => {
   });
 }
 
-// Process payment
+/**
+ * Process payment through CCAvenue
+ * Updated by: Amber Bisht
+ * @param {Object} req - Request object containing payment ID
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Initiates payment process through CCAvenue payment gateway
+ * @returns {String} HTML form for payment gateway redirect
+ */
 exports.processPayment = async (req, res, next) => {
   if (!req.params.id) {
     return next({ statusCode: 400, message: 'Payment Id is required' });
@@ -94,7 +111,15 @@ exports.processPayment = async (req, res, next) => {
   }
 }
 
-// Handle payment response
+/**
+ * Handle payment response
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object containing payment response
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Processes payment response from CCAvenue and updates payment status
+ * @returns {Object} Payment status and redirect URL
+ */
 exports.paymentResponseHandler = async (req, res, next) => {
   const { orderNo, encResp } = req.body;
 
@@ -139,7 +164,15 @@ exports.paymentResponseHandler = async (req, res, next) => {
   }
 };
 
-// Retrieve all successful payments
+/**
+ * Get all successful payments
+ * Made by: Amber Bisht
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Retrieves list of all successful payments
+ * @returns {Object} List of successful payments
+ */
 exports.allPayments = async (req, res, next) => {
   try {
     const payments = await Payment.find({ status: 4 }).sort('-created_at');
@@ -149,7 +182,15 @@ exports.allPayments = async (req, res, next) => {
   }
 };
 
-// Retrieve payment status
+/**
+ * Get payment status
+ * Updated by: Amber Bisht
+ * @param {Object} req - Request object containing payment ID
+ * @param {Object} res - Response object
+ * @param {Function} next - Next middleware function
+ * @description Retrieves status of a specific payment
+ * @returns {Object} Payment status and details
+ */
 exports.paymentStatus = async (req, res, next) => {
   const { id } = req.params;
   if (!id) {
