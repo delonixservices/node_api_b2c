@@ -10,15 +10,15 @@ const MetaSearch = require('../models/MetaSearch');
 const logger = require('../config/logger');
 
 const {
-addMarkup,
-getMarkup
+  addMarkup,
+  getMarkup
 } = require('../services/markupService');
 
 const Config = require('../models/Config');
 
 const jwt = require('jsonwebtoken');
 const {
-jwtSecret
+  jwtSecret
 } = require('../config/index');
 
 const bcrypt = require('bcryptjs');
@@ -26,491 +26,698 @@ const bcrypt = require('bcryptjs');
 const Sms = require('../services/smsService');
 
 const {
-generateInvoice
+  generateInvoice
 } = require('../utils/invoice');
 const {
-generateVoucher
+  generateVoucher
 } = require('../utils/voucher');
 
-const {redisAuth} = require("../config")
-const { createClient } = require('redis');
-const { unregisterPartial } = require('handlebars');
-const HotelTransaction = require('../models/HotelTransaction');
-const crypto = require('crypto');
+const redis = require('redis');
 
-const generateTransactionIdentifier = () => {
-  return crypto.randomBytes(16).toString('hex');
+// COMMENTED BY ANKIT 
+// const {
+//   redisAuth
+// } = require('../config/redis');
+
+// Updated Redis configuration
+const {
+  getRedisClient
+} = require('../config/redis');
+
+//ADDED THIS BY ANKIT
+// const redisConfig = require('./config/redis'); // Adjust path as necessary
+
+// const client = redis.createClient({
+//   host: redisConfig.redisHost,
+//   port: redisConfig.redisPort,
+//   password: redisConfig.redisPassword,
+// });
+
+// Helper function to limit region IDs to maximum 50
+const limitRegionIds = (regionIds, maxCount = 50) => {
+  if (!regionIds || typeof regionIds !== 'string') {
+    return regionIds;
+  }
+  
+  const ids = regionIds.split(',');
+  if (ids.length <= maxCount) {
+    return regionIds;
+  }
+  
+  const limitedIds = ids.slice(0, maxCount).join(',');
+  console.log(`Region IDs limited from ${ids.length} to ${maxCount}: ${limitedIds.substring(0, 100)}...`);
+  return limitedIds;
 };
 
 exports.suggest = async (req, res, next) => {
-const term = req.body.query;
-let page = +req.body.page || 1;
-let perPage = +req.body.perPage || 10;
-let currentItemsCount = +req.body.currentItemsCount || 0;
+  // console.log(req.query);
 
-if (perPage > 50) {
-return res.status(400).json({ message: 'perPage should not be greater than 50' });
+  let client;
+  try {
+    client = await getRedisClient();
+  } catch (err) {
+    console.error('Failed to connect to Redis:', err);
+    // Continue without Redis cache if connection fails
+  }
+
+  // const term = Object.values(req.query).join('');
+
+  const term = req.body.query;
+
+  let page = +req.body.page;
+
+  let perPage = +req.body.perPage;
+
+  let currentItemsCount = +req.body.currentItemsCount;
+
+  console.log('currentItemsCount ' + currentItemsCount)
+
+  if (!page || page < 1) {
+    page = 1;
+  }
+
+  // minimum items allowed = 10
+  if (!perPage || perPage < 10) {
+    perPage = 10;
+  }
+
+  // maximum items allowed at one time = 50
+  if (perPage > 50) {
+    return res.status(400).json({
+      'message': 'perPage should not be greater than 50'
+    })
+  }
+
+  if (!currentItemsCount || currentItemsCount < 0) {
+    currentItemsCount = 0;
+  }
+
+  const defaultResponse = {
+    'data': [],
+    'status': 'complete',
+    'currentItemsCount': 0,
+    'totalItemsCount': 0,
+    'page': page,
+    'perPage': perPage,
+    'totalPages': 0,
+  };
+
+  // dont allow empty strings and string length less than three
+  if (!term || term.length < 3) {
+    return res.json(defaultResponse);
+  }
+
+  let responseData = [];
+
+  try {
+    let cachedData;
+    if (client && client.isOpen) {
+      try {
+        cachedData = await client.get(`autosuggest:${term}`);
+      } catch (err) {
+        console.log('Redis get error:', err);
+      }
+    }
+
+    let parsedData = null;
+    if (cachedData) {
+      parsedData = JSON.parse(cachedData);
+      console.log(cachedData);
+      console.log('served from redis');
+    }
+
+    if (Array.isArray(parsedData)) {
+      responseData = parsedData;
+    } else {
+      const data = await Api.hotels.post("/autosuggest", {
+        "autosuggest": {
+          "query": term,
+          "locale": "en-US"
+        }
+      });
+      console.log('served from api');
+
+      console.log(JSON.stringify(data, null, 2));
+      // console.log(data.data);
+
+      if (data && data.data) {
+        // list of cities auto suggest
+        if (data.data.city) {
+
+          data.data.city.results.map((item, _index) => {
+            item.transaction_identifier = data.transaction_identifier;
+            item.displayName = `${item.name} | (${item.hotelCount})`;
+            // Limit region IDs to maximum 50 to avoid Spring Boot backend issues
+            item.id = limitRegionIds(item.id, 50);
+            responseData.push(item);
+          })
+        }
+
+        // list of hotels auto suggest
+        if (data.data.hotel) {
+
+          data.data.hotel.results.map((item, _index) => {
+            // console.log(item);
+            item.transaction_identifier = data.data.transaction_identifier;
+            item.displayName = `${item.name}`;
+            responseData.push(item);
+          })
+        }
+
+        // list of poi auto suggest
+        if (data.data.poi) {
+
+          data.data.poi.results.map((item, _index) => {
+            item.transaction_identifier = data.data.transaction_identifier;
+            item.displayName = `${item.name} | (${item.hotelCount})`;
+            responseData.push(item);
+          })
+        }
+
+        // cache the response data
+        if (responseData && responseData.length > 0 && client && client.isOpen) {
+          try {
+            // cache will expire in 2 hrs i.e. 2 * 60 * 60 = 7200 seconds
+            await client.setEx(`autosuggest:${term}`, 7200, JSON.stringify(responseData));
+          } catch (err) {
+            console.log('redis set error: ', err);
+          }
+        }
+      }
+    }
+    // console.log(responseData);
+
+  } catch (err) {
+    console.log(err);
+
+    // delete redis cache
+    if (client && client.isOpen) {
+      try {
+        await client.del(`autosuggest:${term}`);
+        console.log("Deleted Successfully!")
+      } catch (delErr) {
+        console.log("Cannot delete cache:", delErr)
+      }
+    }
+
+    return next(err);
+  }
+
+  const nextItemsCount = page * perPage > responseData.length ? responseData.length : page * perPage;
+
+  const paginaionObj = {
+    'currentItemsCount': nextItemsCount,
+    'totalItemsCount': responseData.length,
+    'totalPages': Math.ceil(responseData.length / perPage),
+    'pollingStatus': '',
+  }
+
+  let pollingStatus;
+
+  if (page > paginaionObj.totalPages) {
+    console.log('page: ' + page);
+    console.log(paginaionObj);
+    return res.json(defaultResponse);
+  }
+
+  if (page === paginaionObj.totalPages) {
+    pollingStatus = "complete";
+  } else {
+    pollingStatus = "in-progress";
+  }
+
+  paginaionObj.pollingStatus = pollingStatus;
+
+  let lowerBound = currentItemsCount;
+
+  let upperBound = lowerBound + perPage;
+
+  // upperBound should not be greated than totalItems + 1
+  if (upperBound > paginaionObj.totalItemsCount + 1) {
+    upperBound = paginaionObj.totalItemsCount + 1;
+  }
+
+  console.log(paginaionObj);
+  console.log(page);
+  console.log(perPage);
+  console.log(lowerBound);
+  console.log(upperBound);
+
+  // select only requested no of items in current iteration
+  const selectedItems = responseData.slice(lowerBound, upperBound);
+
+  const response = {
+    'data': selectedItems,
+    'status': paginaionObj.pollingStatus,
+    'currentItemsCount': paginaionObj.currentItemsCount,
+    'totalItemsCount': paginaionObj.totalItemsCount,
+    'page': page,
+    'perPage': perPage,
+    'totalPages': paginaionObj.totalPages,
+  }
+
+  res.json(response);
 }
-
-const defaultResponse = {
-data: [],
-status: 'complete',
-currentItemsCount: 0,
-totalItemsCount: 0,
-page,
-perPage,
-totalPages: 0,
-};
-
-if (!term || term.length < 3) {
-return res.json(defaultResponse);
-}
-
-const client = createClient({
-socket: {
-host: 'localhost',
-port: 6379,
-},
-password: redisAuth,
-});
-
-client.on('error', (err) => console.error('Redis Client Error:', err));
-
-let responseData = [];
-
-try {
-await client.connect();
-
-const cachedData = await client.get(`autosuggest:${term}`);
-const parsedData = cachedData ? JSON.parse(cachedData) : null;
-
-if (Array.isArray(parsedData)) {
-responseData = parsedData;
-console.log('Served from Redis');
-} else {
-const data = await Api.hotels.post("/autosuggest", {
-autosuggest: { query: term, locale: "en-US" }
-});
-
-if (data?.data) {
-if (data.data.city) {
-data.data.city.results.forEach(item => {
-item.transaction_identifier = data.transaction_identifier;
-item.displayName = `${item.name} | (${item.hotelCount})`;
-responseData.push(item);
-});
-}
-
-if (data.data.hotel) {
-data.data.hotel.results.forEach(item => {
-item.transaction_identifier = data.data.transaction_identifier;
-item.displayName = `${item.name}`;
-responseData.push(item);
-});
-}
-
-if (data.data.poi) {
-data.data.poi.results.forEach(item => {
-item.transaction_identifier = data.data.transaction_identifier;
-item.displayName = `${item.name} | (${item.hotelCount})`;
-responseData.push(item);
-});
-}
-
-if (responseData.length > 0) {
-await client.set(`autosuggest:${term}`, JSON.stringify(responseData), { EX: 7200 });
-}
-}
-}
-} catch (err) {
-console.error('Error in suggest:', err);
-
-try {
-await client.del(`autosuggest:${term}`);
-console.log("Redis cache deleted due to error.");
-} catch (delErr) {
-console.log("Cannot delete cache", delErr);
-}
-
-return next(err);
-} finally {
-await client.quit();
-}
-
-const nextItemsCount = Math.min(page * perPage, responseData.length);
-const totalPages = Math.ceil(responseData.length / perPage);
-
-if (page > totalPages) {
-return res.json(defaultResponse);
-}
-
-const pollingStatus = page === totalPages ? "complete" : "in-progress";
-const lowerBound = currentItemsCount;
-let upperBound = lowerBound + perPage;
-if (upperBound > responseData.length + 1) upperBound = responseData.length + 1;
-
-const selectedItems = responseData.slice(lowerBound, upperBound);
-
-return res.json({
-data: selectedItems,
-status: pollingStatus,
-currentItemsCount: nextItemsCount,
-totalItemsCount: responseData.length,
-page,
-perPage,
-totalPages
-});
-};
-
 
 exports.searchHotels = async (req, res, next) => {
 
-const details = req.body.details;
-const area = req.body.area;
-const checkInDate = req.body.checkindate;
-const checkOutDate = req.body.checkoutdate;
-const transaction_identifier = req.body.transaction_identifier;
+  const details = req.body.details;
+  const area = req.body.area;
+  const checkInDate = req.body.checkindate;
+  const checkOutDate = req.body.checkoutdate;
+  const transaction_identifier = req.body.transaction_identifier;
 
-const filters = req.body.filters || {};
+  const filters = req.body.filters || {};
 
-let page = +req.body.page;
+  let page = +req.body.page;
 
-let perPage = +req.body.perPage;
+  let perPage = +req.body.perPage;
 
-let currentHotelsCount = +req.body.currentHotelsCount;
+  let currentHotelsCount = +req.body.currentHotelsCount;
 
-console.log('currentHotelsCount ' + currentHotelsCount)
+  console.log('currentHotelsCount ' + currentHotelsCount)
 
-if (!page || page < 1) {
-page = 1;
-}
-
-// minimum hotels allowed = 10
-if (!perPage || perPage < 10) {
-perPage = 10;
-}
-
-// maximum hotels allowed at one time = 50
-if (perPage > 50) {
-return res.status(400).json({
-'message': 'perPage should not be greater than 50'
-})
-}
-
-if (!currentHotelsCount || currentHotelsCount < 0) {
-currentHotelsCount = 0;
-}
-
-if (!details || !Array.isArray(details)) {
-return res.status(400).json({
-'message': 'Validation failed! Invalid details array'
-})
-}
-
-// transaction identifier not necessary for some requests
-
-// if (!transaction_identifier) {
-// return res.status(400).json({
-// 'message': 'Validation failed! transaction_identifier is missing'
-// })
-// }
-
-let total_adult = 0;
-let total_child = 0;
-let i = 0;
-for (let room of details) {
-total_adult = total_adult + Number(room.adult_count);
-if (Number(room.child_count) > 0) {
-total_child = total_child + Number(room.child_count);
-} else {
-delete details[i].child_count;
-delete details[i].children;
-}
-i = i + 1;
-}
-
-// console.log(checkInDate, checkOutDate, total_adult, total_child, area.id, area.type, area.name);
-const searchObj = {
-  search: {
-    source_market: "IN",
-    type: area.type,
-    id: area.id,
-    name: area.name,
-    check_in_date: checkInDate,
-    check_out_date: checkOutDate,
-    total_adult_count: total_adult.toString(),
-    total_child_count: total_child.toString(),
-    total_room_count: details.length.toString(),
-    details: details
+  if (!page || page < 1) {
+    page = 1;
   }
-};
 
-if (transaction_identifier && transaction_identifier !== "undefined") {
-  searchObj.search.transaction_identifier = transaction_identifier;
-}
+  // minimum hotels allowed = 10
+  if (!perPage || perPage < 10) {
+    perPage = 10;
+  }
 
-console.log(searchObj);
+  // maximum hotels allowed at one time = 50
+  if (perPage > 50) {
+    return res.status(400).json({
+      'message': 'perPage should not be greater than 50'
+    })
+  }
 
-let data;
+  if (!currentHotelsCount || currentHotelsCount < 0) {
+    currentHotelsCount = 0;
+  }
 
-try {
-  await client.connect(); // Ensure Redis client is connected
+  if (!details || !Array.isArray(details)) {
+    return res.status(400).json({
+      'message': 'Validation failed! Invalid details array'
+    })
+  }
+
+  // transaction identifier not necessary for some requests
+
+  // if (!transaction_identifier) {
+  //   return res.status(400).json({
+  //     'message': 'Validation failed! transaction_identifier is missing'
+  //   })
+  // }
+
+  let total_adult = 0;
+  let total_child = 0;
+  let i = 0;
+  for (let room of details) {
+    total_adult = total_adult + Number(room.adult_count);
+    if (Number(room.child_count) > 0) {
+      total_child = total_child + Number(room.child_count);
+    } else {
+      delete details[i].child_count;
+      delete details[i].children;
+    }
+    i = i + 1;
+  }
+
+  // console.log(checkInDate, checkOutDate, total_adult, total_child, area.id, area.type, area.name);
+
+  // Limit region IDs to maximum 50 to avoid Spring Boot backend issues
+  const limitedAreaId = limitRegionIds(area.id, 50);
+
+  const searchObj = {
+    'search': {
+      "source_market": "IN",
+      "type": area.type,
+      "id": limitedAreaId,
+      "name": area.name,
+      "check_in_date": checkInDate,
+      "check_out_date": checkOutDate,
+      "total_adult_count": total_adult.toString(),
+      "total_child_count": total_child.toString(),
+      "total_room_count": details.length.toString(),
+      "details": details
+    }
+  };
+
+  if (transaction_identifier && transaction_identifier != "undefined") {
+    searchObj.search.transaction_identifier = transaction_identifier;
+  }
+
+  console.log(searchObj)
+
+  let data;
 
   try {
-    await client.auth(redisAuth);
-    console.log("Redis authenticated");
-  } catch (err) {
-    console.error("Redis auth error:", err);
-  }
 
-  client.get = util.promisify(client.get);
+    let client;
+    try {
+      client = await getRedisClient();
+    } catch (err) {
+      console.error('Failed to connect to Redis:', err);
+      // Continue without Redis cache if connection fails
+    }
 
-  let cachedData;
-  let redisKey = { ...searchObj.search };
-  delete redisKey.transaction_identifier;
+    let cachedData;
+    let redisKey = Object.assign({}, searchObj.search);
+    delete redisKey.transaction_identifier;
+    // console.log(redisKey, searchObj.search);
+    // stringify search object to work as redis key
+    redisKey = JSON.stringify(redisKey);
+    // console.log(redisKey);
 
-  // Stringify search object to create a stable key
-  redisKey = JSON.stringify(redisKey);
-
-  try {
-    console.log("Checking Redis for key:", redisKey);
-    cachedData = await client.get(`hotels_search:${redisKey}`);
-  } catch (err) {
-    console.error("Redis get error:", err);
-  }
-
-  if (cachedData) {
-    data = JSON.parse(cachedData);
-    console.log("Served from Redis cache");
-  } else {
-    data = await Api.hotels.post("/search", searchObj);
-    console.log("Served from API");
-
-    if (data.data && data.data.totalHotelsCount >= 1) {
+    if (client && client.isOpen) {
       try {
-        await client.set(`hotels_search:${redisKey}`, JSON.stringify(data), 'EX', 300);
-        console.log("Data cached in Redis");
+        cachedData = await client.get(`hotels_search:${redisKey}`);
       } catch (err) {
-        console.error("Redis set error:", err);
+        console.log('Redis get error:', err);
       }
     }
-  }
-} catch (err) {
-  // Fallback if Redis fails
-  try {
-    data = await Api.hotels.post("/search", searchObj);
-    console.log("Served from API fallback");
+    
+    if (cachedData) {
+      data = JSON.parse(cachedData);
+      console.log('served from redis');
+    } else {
+      data = await Api.hotels.post("/search", searchObj);
 
-    if (data.data && data.data.totalHotelsCount >= 1) {
-      const redisKey = JSON.stringify({ ...searchObj.search, transaction_identifier: undefined });
-      client.set(`hotels_search:${redisKey}`, JSON.stringify(data), 'EX', 300, (err) => {
-        if (err) console.error("Redis set error (fallback):", err);
-      });
-      console.log("Data cached (fallback)");
+      console.log('served from the api..');
+      if (data.data && data.data.totalHotelsCount >= 1 && client && client.isOpen) {
+        try {
+          console.log(redisKey);
+          // cache will expire in 5 mins i.e. 5 * 60 = 300 seconds
+          await client.setEx(`hotels_search:${redisKey}`, 300, JSON.stringify(data));
+          console.log('data cached');
+        } catch (err) {
+          console.log('redis set error: ', err);
+        }
+      }
     }
-  } catch (apiErr) {
-    return next(apiErr);
+  } catch (err) {
+    return next(err);
   }
-}
 
-if (!data?.data) {
-  console.log(data);
-  return res.status(404).send("No Hotels Found");
-}
+  if (!data.data) {
+    console.log(data);
+    return res.status(404).send('No Hotels Found');
+  }
+  // If user is directly searching hotel
+  // else if (data.data && data.data.totalHotelsCount < 1) {
+  else if (data.data && data.data.hotels.length < 1) {
+    console.log(`Error: No hotels found`);
+    console.log(data);
+    return res.status(404).send("No hotels found");
+  } else {
+    // console.log(data.data.hotels[0].rates.packages[0]);
 
-if (data.data.hotels.length < 1) {
-  console.log("Error: No hotels found");
-  console.log(data);
-  return res.status(404).send("No hotels found");
-}
+    // console.log(data.data.hotels);
 
-// Proceed with hotel data
-let hotelsList = [...data.data.hotels];
-console.log(hotelsList);
+    // Pagination
 
+    // deep copy hotels array
+    let hotelsList = [...data.data.hotels];
 
-// ==================================
-// ======== TESTING - START =========
-// ==================================
+    console.log(hotelsList);
 
-// copy same hotel multiple times to test pagination
+    // ==================================
+    // ======== TESTING - START =========
+    // ==================================
 
-// const tempHotels = [];
+    // copy same hotel multiple times to test pagination
 
-// for (let i = 0; i < 50; i++) {
-// tempHotels.push(hotelsList[0]);
-// }
+    // const tempHotels = [];
 
-// hotelsList = tempHotels;
+    // for (let i = 0; i < 50; i++) {
+    //   tempHotels.push(hotelsList[0]);
+    // }
 
-// ==================================
-// ========= TESTING - END ==========
-// ==================================
+    // hotelsList = tempHotels;
 
-const nextHotelsCount = page * perPage > hotelsList.length ? hotelsList.length : page * perPage;
+    // ==================================
+    // ========= TESTING - END ==========
+    // ==================================
 
-const paginaionObj = {
-'currentHotelsCount': nextHotelsCount,
-'totalHotelsCount': hotelsList.length,
-'totalPages': Math.ceil(hotelsList.length / perPage),
-'pollingStatus': ''
-}
+    const nextHotelsCount = page * perPage > hotelsList.length ? hotelsList.length : page * perPage;
 
-let pollingStatus;
+    const paginaionObj = {
+      'currentHotelsCount': nextHotelsCount,
+      'totalHotelsCount': hotelsList.length,
+      'totalPages': Math.ceil(hotelsList.length / perPage),
+      'pollingStatus': ''
+    }
 
-if (page > paginaionObj.totalPages) {
-return res.status(422).json({
-'message': 'Invalid page no'
-})
-}
+    let pollingStatus;
 
-if (page === paginaionObj.totalPages) {
-pollingStatus = "complete";
-} else {
-pollingStatus = "in-progress";
-}
+    if (page > paginaionObj.totalPages) {
+      return res.status(422).json({
+        'message': 'Invalid page no'
+      })
+    }
 
-paginaionObj.pollingStatus = pollingStatus;
+    if (page === paginaionObj.totalPages) {
+      pollingStatus = "complete";
+    } else {
+      pollingStatus = "in-progress";
+    }
 
-let lowerBound = currentHotelsCount;
+    paginaionObj.pollingStatus = pollingStatus;
 
-let upperBound = lowerBound + perPage;
+    let lowerBound = currentHotelsCount;
 
-// upperBound should not be greated than totalHotels + 1
-if (upperBound > paginaionObj.totalHotelsCount + 1) {
-upperBound = paginaionObj.totalHotelsCount + 1;
-}
+    let upperBound = lowerBound + perPage;
 
-console.log(paginaionObj);
-console.log(page);
-console.log(perPage);
-console.log(lowerBound);
-console.log(upperBound);
+    // upperBound should not be greated than totalHotels + 1
+    if (upperBound > paginaionObj.totalHotelsCount + 1) {
+      upperBound = paginaionObj.totalHotelsCount + 1;
+    }
 
-// select only requested no of hotels in current iteration
-const selectedHotels = hotelsList.slice(lowerBound, upperBound);
+    console.log(paginaionObj);
+    console.log(page);
+    console.log(perPage);
+    console.log(lowerBound);
+    console.log(upperBound);
 
-// console.log(selectedHotels);
+    // select only requested no of hotels in current iteration
+    const selectedHotels = hotelsList.slice(lowerBound, upperBound);
 
-let hotels;
-let minPrice = 0;
-let maxPrice = 1;
+    // Filter out hotels with empty packages before processing
+    const hotelsWithPackages = selectedHotels.filter(hotel => 
+      hotel.rates && 
+      hotel.rates.packages && 
+      Array.isArray(hotel.rates.packages) && 
+      hotel.rates.packages.length > 0
+    );
 
-try {
-// hotels = await Hotel.insertMany(data.data.hotels);
-hotels = await Hotel.insertMany(selectedHotels);
+    console.log(`Filtered ${selectedHotels.length - hotelsWithPackages.length} hotels with empty packages`);
 
-const promiseArray = hotels.map(async (hotel) => {
-hotel.hotelId = hotel._id;
-const hotelPackage = hotel.rates.packages[0];
+    // If we don't have enough hotels with packages, try to get more from the full list
+    let hotelsToProcess = hotelsWithPackages;
+    if (hotelsWithPackages.length < perPage && hotelsList.length > upperBound) {
+      console.log(`Only ${hotelsWithPackages.length} hotels have packages, trying to get more...`);
+      
+      // Get more hotels from the remaining list to fill up to perPage
+      const remainingHotels = hotelsList.slice(upperBound);
+      const additionalHotelsWithPackages = remainingHotels.filter(hotel => 
+        hotel.rates && 
+        hotel.rates.packages && 
+        Array.isArray(hotel.rates.packages) && 
+        hotel.rates.packages.length > 0
+      );
+      
+      // Add additional hotels up to perPage limit
+      const neededHotels = perPage - hotelsWithPackages.length;
+      const additionalHotels = additionalHotelsWithPackages.slice(0, neededHotels);
+      
+      hotelsToProcess = [...hotelsWithPackages, ...additionalHotels];
+      console.log(`Added ${additionalHotels.length} more hotels with packages. Total: ${hotelsToProcess.length}`);
+    }
 
-try {
-// addMarkup method will apply markup and other charges on hotelPackage
-await addMarkup(hotelPackage);
-} catch (err) {
-throw err;
-}
+    let hotels;
+    let minPrice = 0;
+    let maxPrice = 1;
 
-// Update min/max price based on total chargeable amount
-const totalAmount = hotelPackage.base_amount + hotelPackage.service_component + hotelPackage.gst;
-if (totalAmount < minPrice || minPrice === 0) {
-minPrice = totalAmount;
-}
-if (totalAmount > maxPrice) {
-maxPrice = totalAmount;
-}
+    try {
+      // hotels = await Hotel.insertMany(data.data.hotels);
+      hotels = await Hotel.insertMany(hotelsToProcess);
 
-return hotel;
-});
+      const promiseArray = hotels.map(async (hotel) => {
+        // console.log('total packages: ', hotel.rates.packages.length);
+        hotel.hotelId = hotel._id;
+        // delete hotel._id;
+        // Add markup to ALL packages instead of just the first one
+        
+        // Process all packages for the hotel
+        const processedPackages = [];
+        let hotelMinPrice = Infinity;
+        let hotelMaxPrice = 0;
 
-const allHotels = await Promise.all(promiseArray);
-const filteredHotels = [];
+        for (const hotelPackage of hotel.rates.packages) {
+          // Additional validation to ensure package exists
+          if (!hotelPackage) {
+            console.log(`Skipping package for hotel ${hotel.name} - no valid package found`);
+            continue;
+          }
 
-allHotels.forEach((hotel) => {
-// hotel filters
-if (filters.roomType && filters.roomType.length > 0) {
-let flag = false;
-hotel.rates.packages.forEach((pkg) => {
-if (filters.roomType.includes(pkg.room_details.room_type)) {
-flag = true;
-return;
-}
-});
-console.log('0', flag);
-if (!flag) return;
-}
-if (filters.foodType && filters.foodType.length > 0) {
-let flag = false;
-hotel.rates.packages.forEach((pkg) => {
-if (filters.foodType.includes(pkg.room_details.food)) {
-flag = true;
-return;
-}
-});
-console.log('1', flag);
-if (!flag) return;
-}
-if (filters.refundable && filters.refundable.length > 0) {
-let isNonRefundable = hotel.rates.packages[0].room_details.non_refundable;
-if (isNonRefundable === undefined) {
-isNonRefundable = true;
-}
-// checking for refundable
-const flag = filters.refundable.includes(!isNonRefundable);
-console.log('2', flag);
-if (!flag) return;
-}
-if (filters.starRating && filters.starRating.length > 0) {
-let starRating = hotel.starRating;
-if (!starRating) {
-starRating = 0;
-}
-const flag = filters.starRating.includes(starRating);
-console.log('3', flag);
-if (!flag) return;
-}
+          try {
+            // addMarkup method will apply markup and other charges on hotelPackage
+            await addMarkup(hotelPackage);
+            processedPackages.push(hotelPackage);
+            
+            // Update min/max prices for this hotel
+            if (hotelPackage.base_amount < hotelMinPrice) {
+              hotelMinPrice = hotelPackage.base_amount;
+            }
+            if (hotelPackage.base_amount > hotelMaxPrice) {
+              hotelMaxPrice = hotelPackage.base_amount;
+            }
+          } catch (err) {
+            console.log(`Error applying markup to package in hotel ${hotel.name}:`, err);
+            continue;
+          }
+        }
 
-if (filters.price && filters.price.min >= 0 && filters.price.max > 0) {
-const totalAmount = hotel.rates.packages[0].base_amount + 
-                   hotel.rates.packages[0].service_component + 
-                   hotel.rates.packages[0].gst;
-const flag = totalAmount >= filters.price.min && totalAmount <= filters.price.max;
-if (!flag) return;
-}
-filteredHotels.push(hotel);
-});
+        // Update the hotel's packages with processed ones
+        hotel.rates.packages = processedPackages;
 
-hotels = filteredHotels;
+        // Update global min/max prices
+        if (hotelMinPrice < minPrice) {
+          minPrice = hotelMinPrice;
+        }
+        if (hotelMaxPrice > maxPrice) {
+          maxPrice = hotelMaxPrice;
+        }
 
-} catch (err) {
-console.log(err);
-return res.status(500).json({
-"message": "Error in generating response!"
-});
-}
+        // Only return hotel if it has at least one valid package
+        return processedPackages.length > 0 ? hotel : null;
+      });
 
-const dataObj = {
-'data': {
-'search': data.data.search,
-'region': data.data.region,
-'hotels': hotels,
-'price': {
-minPrice: Math.floor(minPrice),
-maxPrice: Math.ceil(maxPrice)
-},
-'currentHotelsCount': paginaionObj.currentHotelsCount,
-'totalHotelsCount': paginaionObj.totalHotelsCount,
-'page': page,
-'perPage': perPage,
-'totalPages': paginaionObj.totalPages,
-'status': paginaionObj.pollingStatus,
-'transaction_identifier': data.transaction_identifier
-}
-}
+      const allHotels = await Promise.all(promiseArray);
+      // Filter out null values (hotels that failed processing)
+      const validHotels = allHotels.filter(hotel => hotel !== null);
+      
+      // console.log(hotels)
+      const filteredHotels = [];
+      console.log(validHotels);
+      console.log(filters);
+      validHotels.forEach((hotel) => {
+        // Additional validation before accessing packages
+        if (!hotel.rates || !hotel.rates.packages || hotel.rates.packages.length === 0) {
+          console.log(`Skipping hotel ${hotel.name} - no packages available for filtering`);
+          return;
+        }
 
-console.log(dataObj);
-res.json(dataObj);
-}
+        // hotel filters
+        if (filters.roomType && filters.roomType.length > 0) {
+          let flag = false;
+          hotel.rates.packages.forEach((pkg) => {
+            if (filters.roomType.includes(pkg.room_details.room_type)) {
+              flag = true;
+              return;
+            }
+          });
+          console.log('0', flag);
+          if (!flag) return;
+        }
+        if (filters.foodType && filters.foodType.length > 0) {
+          let flag = false;
+          hotel.rates.packages.forEach((pkg) => {
+            if (filters.foodType.includes(pkg.room_details.food)) {
+              flag = true;
+              return;
+            }
+          });
+          console.log('1', flag);
+          if (!flag) return;
+        }
+        if (filters.refundable && filters.refundable.length > 0) {
+          // Check if ANY package matches the refundable filter
+          let flag = false;
+          hotel.rates.packages.forEach((pkg) => {
+            let isNonRefundable = pkg.room_details.non_refundable;
+            if (isNonRefundable === undefined) {
+              isNonRefundable = true;
+            }
+            // checking for refundable
+            if (filters.refundable.includes(!isNonRefundable)) {
+              flag = true;
+            }
+          });
+          console.log('2', flag);
+          if (!flag) return;
+        }
+        if (filters.starRating && filters.starRating.length > 0) {
+          let starRating = hotel.starRating;
+          if (!starRating) {
+            starRating = 0;
+          }
+          const flag = filters.starRating.includes(starRating);
+          console.log('3', flag);
+          if (!flag) return;
+        }
+
+        if (filters.price && filters.price.min >= 0 && filters.price.max > 0) {
+          // Check if ANY package falls within the price range
+          let flag = false;
+          hotel.rates.packages.forEach((pkg) => {
+            if (pkg.base_amount >= filters.price.min && pkg.base_amount <= filters.price.max) {
+              flag = true;
+            }
+          });
+          if (!flag) return;
+        }
+        filteredHotels.push(hotel);
+      });
+
+      console.log(filteredHotels);
+
+      hotels = filteredHotels;
+
+    } catch (err) {
+      console.log(err);
+      return res.status(500).json({
+        "message": "Error in generating response!"
+      });
+    }
+
+    // Update pagination counts based on actual filtered hotels
+    const actualHotelsCount = hotels.length;
+    const actualCurrentHotelsCount = currentHotelsCount + actualHotelsCount;
+    
+    // Recalculate pagination for the actual number of hotels
+    const actualPaginaionObj = {
+      'currentHotelsCount': actualCurrentHotelsCount,
+      'totalHotelsCount': hotelsList.length, // Keep original total for pagination
+      'totalPages': Math.ceil(hotelsList.length / perPage),
+      'pollingStatus': paginaionObj.pollingStatus
+    };
+
+    const dataObj = {
+      'data': {
+        'search': data.data.search,
+        'region': data.data.region,
+        'hotels': hotels,
+        'price': {
+          minPrice: Math.floor(minPrice),
+          maxPrice: Math.ceil(maxPrice)
+        },
+        'currentHotelsCount': actualPaginaionObj.currentHotelsCount,
+        'totalHotelsCount': actualPaginaionObj.totalHotelsCount,
+        'page': page,
+        'perPage': perPage,
+        'totalPages': actualPaginaionObj.totalPages,
+        'status': actualPaginaionObj.pollingStatus,
+        'transaction_identifier': data.transaction_identifier
+      }
+    }
+
+    console.log(dataObj);
+    res.json(dataObj);
+  }
+};
 
 exports.searchPackages = async (req, res, next) => {
 

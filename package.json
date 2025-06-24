@@ -6,7 +6,8 @@
   "license": "Private",
   "private": true,
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "clear-redis": "node clear-redis.js"
   },
   "author": "TripBazaar",
   "dependencies": {

@@ -52,6 +52,56 @@ const expressLoader = async (app) => {
     return res.send('Welcome to the TripBazaar api server');
   });
 
+  // Health check endpoint
+  app.get('/health', async (req, res) => {
+    const health = {
+      status: 'OK',
+      timestamp: new Date().toISOString(),
+      services: {
+        server: 'OK',
+        mongodb: 'OK',
+        redis: 'UNKNOWN'
+      }
+    };
+
+    try {
+      // Check MongoDB connection
+      const mongoose = require('mongoose');
+      if (mongoose.connection.readyState !== 1) {
+        health.services.mongodb = 'DISCONNECTED';
+        health.status = 'DEGRADED';
+      }
+    } catch (error) {
+      health.services.mongodb = 'ERROR';
+      health.status = 'DEGRADED';
+    }
+
+    try {
+      // Check Redis connection
+      const { getRedisClient } = require('../config/redis');
+      const redisClient = await getRedisClient();
+      
+      if (redisClient && redisClient.isOpen) {
+        const pong = await redisClient.ping();
+        if (pong === 'PONG') {
+          health.services.redis = 'OK';
+        } else {
+          health.services.redis = 'ERROR';
+          health.status = 'DEGRADED';
+        }
+      } else {
+        health.services.redis = 'DISCONNECTED';
+        health.status = 'DEGRADED';
+      }
+    } catch (error) {
+      health.services.redis = 'ERROR';
+      health.status = 'DEGRADED';
+    }
+
+    const statusCode = health.status === 'OK' ? 200 : 503;
+    res.status(statusCode).json(health);
+  });
+
   app.use('/api', indexRoute);
   app.use('/api/auth', authRoute);
   app.use('/api/hotels', hotelsRoute);
