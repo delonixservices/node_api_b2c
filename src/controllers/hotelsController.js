@@ -504,37 +504,8 @@ exports.searchHotels = async (req, res, next) => {
     // select only requested no of hotels in current iteration
     const selectedHotels = hotelsList.slice(lowerBound, upperBound);
 
-    // Filter out hotels with empty packages before processing
-    const hotelsWithPackages = selectedHotels.filter(hotel => 
-      hotel.rates && 
-      hotel.rates.packages && 
-      Array.isArray(hotel.rates.packages) && 
-      hotel.rates.packages.length > 0
-    );
-
-    console.log(`Filtered ${selectedHotels.length - hotelsWithPackages.length} hotels with empty packages`);
-
-    // If we don't have enough hotels with packages, try to get more from the full list
-    let hotelsToProcess = hotelsWithPackages;
-    if (hotelsWithPackages.length < perPage && hotelsList.length > upperBound) {
-      console.log(`Only ${hotelsWithPackages.length} hotels have packages, trying to get more...`);
-      
-      // Get more hotels from the remaining list to fill up to perPage
-      const remainingHotels = hotelsList.slice(upperBound);
-      const additionalHotelsWithPackages = remainingHotels.filter(hotel => 
-        hotel.rates && 
-        hotel.rates.packages && 
-        Array.isArray(hotel.rates.packages) && 
-        hotel.rates.packages.length > 0
-      );
-      
-      // Add additional hotels up to perPage limit
-      const neededHotels = perPage - hotelsWithPackages.length;
-      const additionalHotels = additionalHotelsWithPackages.slice(0, neededHotels);
-      
-      hotelsToProcess = [...hotelsWithPackages, ...additionalHotels];
-      console.log(`Added ${additionalHotels.length} more hotels with packages. Total: ${hotelsToProcess.length}`);
-    }
+    // Do not filter out hotels without packages; process all selected hotels
+    let hotelsToProcess = selectedHotels;
 
     let hotels;
     let minPrice = 0;
@@ -583,6 +554,17 @@ exports.searchHotels = async (req, res, next) => {
         // Update the hotel's packages with processed ones
         hotel.rates.packages = processedPackages;
 
+        // If no packages, add a dummy zero package
+        if (processedPackages.length === 0) {
+          hotel.rates.packages = [{
+            base_amount: 0,
+            service_component: 0,
+            gst: 0,
+            chargeable_rate: 0,
+            // add other fields as needed
+          }];
+        }
+
         // Update global min/max prices
         if (hotelMinPrice < minPrice) {
           minPrice = hotelMinPrice;
@@ -591,8 +573,8 @@ exports.searchHotels = async (req, res, next) => {
           maxPrice = hotelMaxPrice;
         }
 
-        // Only return hotel if it has at least one valid package
-        return processedPackages.length > 0 ? hotel : null;
+        // Always return hotel (even if only dummy package)
+        return hotel;
       });
 
       const allHotels = await Promise.all(promiseArray);

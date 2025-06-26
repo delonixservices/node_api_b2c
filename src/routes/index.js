@@ -6,6 +6,7 @@ const HotelOffer = require('../models/HotelOffer');
 const FlightOffer = require('../models/FlightOffer');
 const HolidayOffer = require('../models/HolidayOffer');
 const SpecialOffer = require('../models/SpecialOffer');
+const GstDetail = require('../models/GstDetail');
 
 const {
   dateCompare
@@ -41,6 +42,29 @@ router.post('/couponCheck', async (req, res, next) => {
     return next(err);
   }
 
+});
+
+router.get('/coupons/global', async (req, res, next) => {
+  try {
+    // Find only coupons that are explicitly marked as global
+    let globalCoupons = await Coupon.find({ isGlobal: true });
+
+    // discard expired offers
+    globalCoupons = globalCoupons.filter((coupon) => {
+      const expireTime = new Date(coupon.to).getTime();
+      const isExpired = Date.now() > expireTime;
+      if (!isExpired) {
+        return true;
+      }
+    });
+
+    res.json({
+      "status": 200,
+      "data": globalCoupons
+    });
+  } catch (err) {
+    return next(err);
+  }
 });
 
 router.get('/site/allbanner', async (req, res) => {
@@ -317,6 +341,131 @@ router.get('/offers-all', async (req, res) => {
     "status": 200,
     "data": allOffers
   });
+});
+
+router.post('/gst-details', async (req, res, next) => {
+  let gstData = req.body;
+
+  try {
+    // Validate required fields
+    const requiredFields = ['gstnumber', 'name', 'email', 'address', 'city', 'pincode', 'state', 'mobile'];
+    for (let field of requiredFields) {
+      if (!gstData[field]) {
+        throw new Error(`${field} is required`);
+      }
+    }
+
+    // Validate GST number format (2 digits + 10 digits + 1 digit + 1 digit)
+    const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    if (!gstRegex.test(gstData.gstnumber)) {
+      throw new Error('Invalid GST number format. Please enter a valid 15-character GST number');
+    }
+
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(gstData.email)) {
+      throw new Error('Invalid email format');
+    }
+
+    // Validate mobile number (10 digits)
+    const mobileRegex = /^[0-9]{10}$/;
+    if (!mobileRegex.test(gstData.mobile)) {
+      throw new Error('Invalid mobile number. Please enter a 10-digit mobile number');
+    }
+
+    // Validate pincode (6 digits)
+    const pincodeRegex = /^[0-9]{6}$/;
+    if (!pincodeRegex.test(gstData.pincode)) {
+      throw new Error('Invalid pincode. Please enter a 6-digit pincode');
+    }
+
+    // Check if GST number already exists
+    const existingGst = await GstDetail.findOne({ gstnumber: gstData.gstnumber });
+    if (existingGst) {
+      throw new Error('GST number already exists');
+    }
+
+    // Create new GST detail
+    const newGstDetail = new GstDetail(gstData);
+    const savedGstDetail = await newGstDetail.save();
+
+    res.json({
+      "success": 1,
+      "message": "GST details saved successfully",
+      "data": savedGstDetail
+    });
+
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.get('/gst-details/:gstnumber', async (req, res, next) => {
+  try {
+    const { gstnumber } = req.params;
+
+    if (!gstnumber) {
+      throw new Error('GST number is required');
+    }
+
+    const gstDetail = await GstDetail.findOne({ gstnumber: gstnumber });
+
+    if (!gstDetail) {
+      return res.status(404).json({
+        "success": 0,
+        "message": "GST details not found"
+      });
+    }
+
+    res.json({
+      "success": 1,
+      "data": gstDetail
+    });
+
+  } catch (err) {
+    return next(err);
+  }
+});
+
+router.put('/gst-details/:gstnumber', async (req, res, next) => {
+  try {
+    const { gstnumber } = req.params;
+    const updateData = req.body;
+
+    if (!gstnumber) {
+      throw new Error('GST number is required');
+    }
+
+    // Validate required fields if updating
+    const requiredFields = ['name', 'email', 'address', 'city', 'pincode', 'state', 'mobile'];
+    for (let field of requiredFields) {
+      if (updateData[field] !== undefined && !updateData[field]) {
+        throw new Error(`${field} cannot be empty`);
+      }
+    }
+
+    const updatedGstDetail = await GstDetail.findOneAndUpdate(
+      { gstnumber: gstnumber },
+      updateData,
+      { new: true, runValidators: true }
+    );
+
+    if (!updatedGstDetail) {
+      return res.status(404).json({
+        "success": 0,
+        "message": "GST details not found"
+      });
+    }
+
+    res.json({
+      "success": 1,
+      "message": "GST details updated successfully",
+      "data": updatedGstDetail
+    });
+
+  } catch (err) {
+    return next(err);
+  }
 });
 
 module.exports = router;

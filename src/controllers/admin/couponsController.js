@@ -19,6 +19,7 @@ exports.addCoupon = async (req, res, next) => {
   const value = req.body.value;
   const type = req.body.type;
   const product = req.body.product;
+  const isGlobal = req.body.isGlobal || false;
 
   const coupon = await Coupon.findOne({
     "code": code
@@ -39,6 +40,7 @@ exports.addCoupon = async (req, res, next) => {
   newCoupon.value = value;
   newCoupon.type = type;
   newCoupon.product = product;
+  newCoupon.isGlobal = isGlobal;
 
   try {
     await newCoupon.save();
@@ -90,6 +92,7 @@ exports.editCoupon = async (req, res, next) => {
   const value = req.body.value;
   const type = req.body.type;
   const product = req.body.product;
+  const isGlobal = req.body.isGlobal || false;
 
   const coupon = await Coupon.findById(id);
 
@@ -106,6 +109,7 @@ exports.editCoupon = async (req, res, next) => {
   coupon.value = value;
   coupon.type = type;
   coupon.product = product;
+  coupon.isGlobal = isGlobal;
 
   try {
     await coupon.save();

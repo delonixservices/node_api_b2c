@@ -29,6 +29,10 @@ const couponSchema = new Schema({
     product: {
         type: String,
         required: true
+    },
+    isGlobal: {
+        type: Boolean,
+        default: false
     }
 }, {
     timestamps: {

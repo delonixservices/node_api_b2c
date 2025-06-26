@@ -30,18 +30,27 @@ module.exports = {
   addMarkup: async (hotelPackage) => {
     // Validate input
     if (!hotelPackage) {
-      const err = 'No hotel package found to apply markup at markupService.js';
-      logger.error(err);
-      throw new Error(err);
+      logger.info('No hotel package found to apply markup at markupService.js - returning 0 price');
+      return {
+        base_amount: 0,
+        service_component: 0,
+        gst: 0,
+        chargeable_rate: 0
+      };
     }
 
-    let baseAmount = hotelPackage.chargeable_rate;
+    let baseAmount = hotelPackage.chargeable_rate | 0;
     let config = await Config.findOne({});
 
     // Validate config
     if (!config || !config.markup) {
-      logger.info('Cannot find any document in the config collection. at markupService.js');
-      return;
+      logger.info('Cannot find any document in the config collection. at markupService.js - returning 0 price');
+      return {
+        base_amount: 0,
+        service_component: 0,
+        gst: 0,
+        chargeable_rate: 0
+      };
     }
 
     try {
@@ -95,10 +104,22 @@ module.exports = {
           gst: hotelPackage.gst,
           totalChargeable: hotelPackage.chargeable_rate
         });
+      } else {
+        // If base amount or markup value is not positive, set all values to 0
+        hotelPackage.base_amount = 0;
+        hotelPackage.service_component = 0;
+        hotelPackage.gst = 0;
+        hotelPackage.chargeable_rate = 0;
+        
+        logger.info('Base amount or markup value not positive - setting all values to 0');
       }
     } catch (err) {
       logger.error('Error in markup calculation:', err);
-      throw new Error('Error in markup calculation');
+      // Return 0 values on error instead of throwing
+      hotelPackage.base_amount = 0;
+      hotelPackage.service_component = 0;
+      hotelPackage.gst = 0;
+      hotelPackage.chargeable_rate = 0;
     }
   },
 
