@@ -13,7 +13,6 @@ const {
 } = require('../utils/common');
 
 const generateVoucher = async (transaction) => {
-
   const {
     package: hotelPackage,
     guest,
@@ -26,7 +25,10 @@ const generateVoucher = async (transaction) => {
     originalName,
     location,
     imageDetails,
-    policy
+    policy,
+    amenities,
+    starRating,
+    dailyRates
   } = transaction.hotel;
 
   const {
@@ -41,17 +43,16 @@ const generateVoucher = async (transaction) => {
     currency
   } = transaction.pricing;
 
-  const rate_currency = currency === "INR" ? '&#8377' : currency;
+  const rate_currency = currency === "INR" ? '₹' : currency;
 
   let cancellationPolicy = "";
-
   cancellation_policy.cancellation_policies.forEach((data) => {
     cancellationPolicy += `
-    <tr>
-        <td>${parseDate(data.date_from)}</td>
-        <td>${parseDate(data.date_to)}</td>
-        <td>${data.penalty_percentage}%</td>
-    </tr> `;
+    <tr class="border-t border-gray-200">
+        <td class="py-3 px-4">${parseDate(data.date_from)}</td>
+        <td class="py-3 px-4">${parseDate(data.date_to)}</td>
+        <td class="py-3 px-4">${data.penalty_percentage}%</td>
+    </tr>`;
   });
 
   const foodType = [
@@ -60,203 +61,162 @@ const generateVoucher = async (transaction) => {
     ", Breakfast",
     ", Lunch",
     ", Dinner",
-    ", Half Board: Could be any 2 meals (e.g.breakfast and lunch, lunch and dinner",
+    ", Half Board: Could be any 2 meals (e.g. breakfast and lunch, lunch and dinner)",
     ", Full Board: Breakfast, lunch and dinner",
     ", All Inclusive"
   ];
 
+  // Format amenities for display
+  let amenitiesDisplay = "";
+  if (amenities && amenities.length > 0) {
+    amenitiesDisplay = amenities.slice(0, 8).join(", "); // Show first 8 amenities
+    if (amenities.length > 8) {
+      amenitiesDisplay += ` and ${amenities.length - 8} more`;
+    }
+  }
+
+  // Format star rating
+  let starRatingDisplay = "";
+  if (starRating && starRating.value) {
+    starRatingDisplay = `${starRating.value}★ ${starRating.text || ''}`;
+  }
+
   const content = `
-    <div style="margin:40px; font-family: Helvetica, sans-serif; line-height: 25px; color: #333">
-        <style>
-            .header {
-                display: flex;
-                justify-content: space-between;
-                border-bottom: 1px solid #d8d8d8;
-                padding-bottom: 10px;                
-                margin:-40px 0 40px;
-            }
-            .header #logo {
-                display: flex;
-                text-align: center;
-                align-items: center;
-                font-weight: bold;
-                font-size: 30px;
-                color:#de3c31;
-            }
-            .header .right {
-                text-align: right;
-            }
-            .hotel_details {
-                display: flex;
-                padding:40px 0;
-            }
-            .hotel_img {
-                width: 40%;
-            }
-            .hotel_img img {
-                width: 100%;
-                height:175px;
-                object-fit: cover;
-            }
-            .hotel_info {
-                width: 60%;
-                padding-left: 40px
-            }
-            .hotel_info p {
-                margin-top: 0;
-            }
-            .hotel_name {
-                font-weight: bold;
-            }
-            .other_info table {
-                width: 100%;
-            }
-            .other_info table tr td {
-                border-top: 1px solid #d8d8d8;
-                padding: 12px 0;
-            }
-            .other_info table tr td p:first-child {
-                font-weight: bold;
-            }
-            .other_info table tr td p:last-child, .room_details table tr td:last-child {
-                color: #4a4a4a;
-            }
-            .room_details table tr td:first-child {
-                width: 40%;
-                font-weight: bold;
-            }
-            .room_details table tr td {
-                border-top: 1px solid #d8d8d8;
-                padding: 20px 0;
-            }
-            .cancellation_p tr td {
-                font-weight: normal !important;
-            }
-            .cancellation_p tr th {
-                text-align: left;
-                padding-bottom: 20px;
-            }
-        </style>
-        <div>
-            <div class="header">
-                <div id="logo">
-                    <div>TripBazaar</div>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    </head>
+    <body class="font-['Inter'] bg-gray-50">
+        <div class="max-w-4xl mx-auto p-8 bg-white shadow-xl rounded-lg my-8">
+            <!-- Header -->
+            <div class="flex justify-between items-center border-b border-gray-200 pb-4 mb-8">
+                <div class="flex items-center">
+                    <img src="https://holidayz.tripbazaar.in/wp-content/uploads/2024/12/trip_bazar_logo-removebg-preview-1-e1735115088907.png" alt="TripBazaar Logo" class="h-12 mr-4">
+                    <span class="text-2xl font-bold text-red-600">TripBazaar</span>
                 </div>
-                <div class="right">
-                    <p><strong>Booking ID:</strong> <span>${transaction._id}</span></p>
-                    <p><strong>Booked on:</strong> ${parseDate(confirmed_at)} ${parseTime(confirmed_at)}</p>
+                <div class="text-right text-gray-600">
+                    <p class="font-semibold">Booking ID: <span class="text-gray-800">${transaction._id}</span></p>
+                    <p>Booked on: ${parseDate(confirmed_at)} ${parseTime(confirmed_at)}</p>
                 </div>
             </div>
-            <div class="main">
-                <h1> Booking Confirmed</h1>
-                <p><strong>Dear ${guest.first_name} ${guest.last_name}</strong></p>
-                <p>Thank you for choosing tripbazaar</p>
-                <p>Your hotel booking is confirmed. Your
-                    eTicket is attached with the email sent to you.</p>
-                <div class="hotel_details">
-                    <div class="hotel_img"><img
-                            src="${imageDetails? imageDetails.prefix: ""}0${imageDetails?imageDetails.suffix:""}" alt="hotelImg"></div>
-                    <div class="hotel_info">
-                        <p class="hotel_name">${originalName}</p>
-                        <p class="hotel_address">${location.address}<br>
-                           ${location.city} ${location.postalCode}, ${location.country?location.country:location.countryCode || ""}</p>
-                        ${phone ? `<p class="hotel_phone"><strong>Phone:</strong> ${phone}</p>` : ``}
-                        ${email ? `<p class="hotel_email"><strong>Email:</strong> ${email}</p>` : ``}
+
+            <!-- Main Content -->
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold text-gray-800 mb-4">Booking Confirmed</h1>
+                <p class="text-lg text-gray-700"><strong>Dear ${guest.first_name} ${guest.last_name},</strong></p>
+                <p class="text-gray-600 mt-2">Thank you for choosing TripBazaar!</p>
+                <p class="text-gray-600">Your hotel booking is confirmed. Your eTicket is attached with the email sent to you.</p>
+            </div>
+
+            <!-- Hotel Details -->
+            <div class="flex flex-col md:flex-row gap-8 mb-8">
+                <div class="md:w-1/2">
+                    <img src="${imageDetails ? imageDetails.prefix : ''}0${imageDetails ? imageDetails.suffix : ''}" alt="Hotel Image" class="w-full h-64 object-cover rounded-lg shadow-md">
+                </div>
+                <div class="md:w-1/2">
+                    <h2 class="text-2xl font-semibold text-gray-800">${originalName}</h2>
+                    ${starRatingDisplay ? `<p class="text-yellow-600 font-semibold mt-1">${starRatingDisplay}</p>` : ''}
+                    <p class="text-gray-600 mt-2">${location.address}<br>${location.city} ${location.postalCode}, ${location.country ? location.country : location.countryCode || ''}</p>
+                    ${phone ? `<p class="text-gray-600 mt-2"><strong>Phone:</strong> ${phone}</p>` : ''}
+                    ${email ? `<p class="text-gray-600 mt-2"><strong>Email:</strong> ${email}</p>` : ''}
+                    ${amenitiesDisplay ? `<p class="text-gray-600 mt-2"><strong>Amenities:</strong> ${amenitiesDisplay}</p>` : ''}
+                </div>
+            </div>
+
+            <!-- Other Information -->
+            <div class="bg-gray-100 p-6 rounded-lg mb-8">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <p class="font-semibold text-gray-700">Guest Name</p>
+                        <p class="text-gray-600">${guest.first_name} ${guest.last_name}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-700">Hotel Booking ID</p>
+                        <p class="text-gray-600">${booking_id}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-700">Check In</p>
+                        <p class="text-gray-600">${parseDate(hotelPackage.check_in_date)} ${checkInTime}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-700">Check Out</p>
+                        <p class="text-gray-600">${parseDate(hotelPackage.check_out_date)} ${checkOutTime}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-700">Room Type</p>
+                        <p class="text-gray-600">${hotelPackage.room_details.description}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-700">Total Amount</p>
+                        <p class="text-gray-600">${rate_currency} ${Math.ceil(total_chargeable_amount)}</p>
+                    </div>
+                    <div>
+                        <p class="font-semibold text-gray-700">Refund Policy</p>
+                        <p class="text-gray-600">${hotelPackage.room_details.non_refundable === false ? "Refundable" : "Non Refundable"}</p>
                     </div>
                 </div>
             </div>
-            <div class="other_info">
-                <table>
-                    <tr>
-                        <td>
-                            <p>Guest Name</p>
-                            <p>${guest.first_name} ${guest.last_name}</p>
-                        </td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <p>Check In</p>
-                            <p>${parseDate(hotelPackage.check_in_date)} ${checkInTime}</p>
-                        </td>
-                        <td>
-                            <p>Check Out</p>
-                            <p>${parseDate(hotelPackage.check_out_date)} ${checkOutTime}</p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <p>Hotel Booking Id</p>
-                            <p>${booking_id}</p>
-                        </td>
-                        <td>
-                            <p>Total Amount</p>
-                            <p>${rate_currency} ${Math.ceil(total_chargeable_amount)}</p>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>
-                            <p>Room Type: ${hotelPackage.room_details.description}</p>
-                            <p></p>
-                        </td>
-                        <td>
-                            ${hotelPackage.room_details.non_refundable === false ? "Refundable":"Non Refundable"}
-                        </td>
-                    </tr>
-                </table>
-            </div>
-            <div class="room_details">
-                <h2>Room Details</h2>
-                <table>
-                    <tr>
-                        <td>Number of Guests</td>
-                        <td>Room - ${hotelPackage.room_count} : Adults - ${hotelPackage.adult_count}, Child - ${hotelPackage.child_count}</td>
-                    </tr>
-                    <tr>
-                        <td>Inclusions</td>
-                        <td>Accommodation${foodType[hotelPackage.room_details.food]}</td>
-                    </tr>
-        
-                    <tr>
-                        <td>Cancellation Policy</td>
-                        <td>
-                            <table class="cancellation_p" width="100%">
-                                <tr>
-                                    <th>Date From</th>
-                                    <th>Date To</th>
-                                    <th>Penalty %</th>
+
+            <!-- Room Details -->
+            <div>
+                <h2 class="text-2xl font-semibold text-gray-800 mb-4">Room Details</h2>
+                <div class="border-t border-gray-200">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+                        <div>
+                            <p class="font-semibold text-gray-700">Number of Guests</p>
+                            <p class="text-gray-600">Room - ${hotelPackage.room_count} : Adults - ${hotelPackage.adult_count}, Child - ${hotelPackage.child_count}</p>
+                        </div>
+                        <div>
+                            <p class="font-semibold text-gray-700">Inclusions</p>
+                            <p class="text-gray-600">Accommodation${foodType[hotelPackage.room_details.food]}</p>
+                        </div>
+                    </div>
+                    <div class="py-4">
+                        <p class="font-semibold text-gray-700 mb-2">Cancellation Policy</p>
+                        <table class="w-full border-collapse">
+                            <thead>
+                                <tr class="bg-gray-200">
+                                    <th class="py-3 px-4 text-left text-gray-700">Date From</th>
+                                    <th class="py-3 px-4 text-left text-gray-700">Date To</th>
+                                    <th class="py-3 px-4 text-left text-gray-700">Penalty %</th>
                                 </tr>
-                                
+                            </thead>
+                            <tbody>
                                 ${cancellationPolicy}
-                            </table>
-                            <small>${cancellation_policy.remarks}</small>
-                        </td>
-                    </tr>
-                    <tr>
-                        <td>Hotel Policy</td>
-                        <td>${policy}</td>
-                    </tr>
-                    <tr>
-                        <td colspan="2">***NOTE***: Any increase in the price due to taxes will be borne by you and
-                            payable at the hotel.</td>
-                    </tr>
-                </table>
+                            </tbody>
+                        </table>
+                        <p class="text-sm text-gray-500 mt-2">${cancellation_policy.remarks}</p>
+                    </div>
+                    <div class="py-4">
+                        <p class="font-semibold text-gray-700">Hotel Policy</p>
+                        <p class="text-gray-600">${policy || 'Standard hotel policies apply. Please contact the hotel directly for specific policy details.'}</p>
+                    </div>
+                    <div class="py-4">
+                        <p class="text-sm text-red-600"><strong>***NOTE***</strong>: Any increase in the price due to taxes will be borne by you and payable at the hotel.</p>
+                    </div>
+                </div>
             </div>
         </div>
-    </div>`;
+    </body>
+    </html>
+  `;
 
-  // convert voucher to pdf
+  // Convert voucher to PDF
   const browser = await puppeteer.launch({
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage' // Fixes issue when chrome need more than 64mb of storage. This will write shared memory files into /tmp instead of /dev/shm
+      '--disable-dev-shm-usage'
     ],
     headless: true
   });
 
-  const page = await browser.newPage()
-  await page.setContent(content)
+  const page = await browser.newPage();
+  await page.setContent(content);
   const buffer = await page.pdf({
     format: 'A4',
     printBackground: true,
@@ -266,14 +226,12 @@ const generateVoucher = async (transaction) => {
       right: '0px',
       bottom: '40px'
     }
-  })
+  });
   await browser.close();
   return buffer;
 }
 
 const generateFlightVoucher = async (transaction) => {
-  // console.log(transaction);
-
   let data;
   if (transaction.order_doc_issue_response && transaction.order_doc_issue_response.Response.TicketDocInfos) {
     data = transaction.order_doc_issue_response.Response;
@@ -305,23 +263,19 @@ const generateFlightVoucher = async (transaction) => {
 
   const totalAmount = data.Order.TotalOrderPrice.DetailCurrencyPrice.Total.content;
 
-
   const segmentList = data.DataLists.FlightSegmentList.FlightSegment;
 
   let flightSegmentList = [];
 
   if (Array.isArray(segmentList)) {
-    // if segmentList is array of segments
     flightSegmentList = segmentList;
   } else {
-    // if segmentList is single object
     flightSegmentList[0] = segmentList;
   }
 
   const flightSegments = [];
 
   flightSegmentList.forEach((flightSegment) => {
-
     const flightSegmentsObj = {
       airlineName: flightSegment.MarketingCarrier.Name,
       airlineId: flightSegment.MarketingCarrier.AirlineID,
@@ -337,10 +291,9 @@ const generateFlightVoucher = async (transaction) => {
         airportCode: flightSegment.Departure.AirportCode,
         airportName: flightSegment.Departure.AirportName,
         date: flightSegment.Departure.Date,
-        time: flightSegment.Departure.Time
+        time: flightSegment.Arrival.Time
       }
     }
-
     flightSegments.push(flightSegmentsObj);
   });
 
@@ -365,14 +318,12 @@ const generateFlightVoucher = async (transaction) => {
     const passenger = {
       'firstName': el.Individual.GivenName,
       'lastName': el.Individual.Surname,
-      'ticketDocNbr': ticketDocNbr,
+      'ticketDocNbr': ticketDocNumber,
     }
     passengers.push(passenger);
   });
 
-  const base64Img = fs.readFileSync(path.join(__dirname,
-    '../../public/logo.png'), 'base64');
-  // console.log(base64Img);
+  const base64Img = fs.readFileSync(path.join(__dirname, '../../public/logo.png'), 'base64');
 
   const dataObj = {
     'bookingId': transaction._id,
@@ -392,21 +343,17 @@ const generateFlightVoucher = async (transaction) => {
 
   const html = template(dataObj);
 
-
-  // convert voucher to pdf
   const browser = await puppeteer.launch({
     args: [
       '--no-sandbox',
       '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage' // Fixes issue when chrome need more than 64mb of storage. This will write shared memory files into /tmp instead of /dev/shm
+      '--disable-dev-shm-usage'
     ],
     headless: true
   });
 
-  const page = await browser.newPage()
-
+  const page = await browser.newPage();
   await page.setContent(html);
-
   const buffer = await page.pdf({
     format: 'A4',
     printBackground: true,
@@ -416,7 +363,7 @@ const generateFlightVoucher = async (transaction) => {
       right: '0px',
       bottom: '40px'
     }
-  })
+  });
   await browser.close();
   return buffer;
 }
