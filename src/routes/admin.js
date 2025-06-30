@@ -109,6 +109,20 @@ const {
 
 const { getDashboardData } = require('../controllers/admin/dashboardController');
 
+// IP Blocking controllers
+const {
+  getAllBlockedIPs,
+  getIPActivity,
+  getIPBlockingStats,
+  bulkUnblockExpired,
+  getIPBlockingConfig
+} = require('../controllers/admin/ipBlockController');
+
+const {
+  blockIP,
+  unblockIP
+} = require('../middleware/ipRateLimit');
+
 router.post('/banners', isAdmin, upload.single('image'), addBanner);
 
 router.get('/banners', isAdmin, allBanners);
@@ -309,4 +323,20 @@ router.get('/getDashboardData',isAdmin, getDashboardData);
 // router.post('/get-paymentoption',isAdmin, getpaymentoption);
 
 router.post('/refundamountcheck',isAdmin,refundamountcheck);
+
+// IP Blocking routes
+router.get('/blocked-ips', isAdmin, getAllBlockedIPs);
+
+router.get('/ip-activity/:ip', isAdmin, getIPActivity);
+
+router.get('/ip-blocking-stats', isAdmin, getIPBlockingStats);
+
+router.post('/bulk-unblock-expired', isAdmin, bulkUnblockExpired);
+
+router.get('/ip-blocking-config', isAdmin, getIPBlockingConfig);
+
+router.post('/block-ip', isAdmin, blockIP);
+
+router.post('/unblock-ip/:ip', isAdmin, unblockIP);
+
 module.exports = router;

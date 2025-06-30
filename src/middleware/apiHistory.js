@@ -1,5 +1,6 @@
 const History = require('../models/History');
 const logger = require('../config/logger');
+const { getClientIP } = require('./ipRateLimit');
 
 module.exports = (req, res, next) => {
   try {
@@ -37,7 +38,10 @@ module.exports = (req, res, next) => {
         const responseTime = new Date().getTime() - startTime + 10;
 
         console.log(`responseTime ${responseTime} ms`);
-        console.log(req.ip, req.ips)
+        
+        // Get client IP using the centralized function
+        const clientIP = req.clientIP || getClientIP(req);
+        console.log('Client IP:', clientIP);
 
         let respBody;
         try {
@@ -51,7 +55,7 @@ module.exports = (req, res, next) => {
             'body': req.body,
             'method': req.method,
             'remoteAddress': req._remoteAddress,
-            'ip': req.ip,
+            'ip': clientIP,
             'startTime': req._startTime
           },
           'response': {

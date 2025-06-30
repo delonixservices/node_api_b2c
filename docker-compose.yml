@@ -2,82 +2,78 @@ version: '3.8'
 
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
     ports:
-      - "3334:3334" # Map port 3334 on the container to port 3334 on the host
+      - "3334:3334"
     environment:
-      - HOST=${HOST}
-      - PORT=${PORT}
-      - PROTOCOL=${PROTOCOL}
-      - APP_HOST=${APP_HOST}
-      - CLIENT_HOST=${CLIENT_HOST}
-      - CLIENT_PORT=${CLIENT_PORT}
-      - NODE_ENV=${NODE_ENV}
-      - JWT_SECRET=${JWT_SECRET}
-      - HOTEL_APIURL=${HOTEL_APIURL}
-      - HOTEL_APIAUTH=${HOTEL_APIAUTH}
-      - FLIGHT_APIURL=${FLIGHT_APIURL}
-      - SMS_AUTH_KEY=${SMS_AUTH_KEY}
-      - DB_CONNECTION=${DB_CONNECTION}
-      - DB_HOST=mongo  # Updated to use service name
-      - DB_PORT=${DB_PORT}
-      - DB_DATABASE=${DB_DATABASE}
-      - DB_CONNECTION_STRING=${DB_CONNECTION_STRING}
-      - REDIS_HOST=redis  # Updated to use service name
+      - NODE_ENV=production
+      - PORT=3334
+      - HOST=0.0.0.0
+      - DB_CONNECTION_STRING=mongodb://mongo:27017/b2capi
+      - REDIS_HOST=redis
       - REDIS_PORT=6379
-      # Remove REDIS_AUTH for local development without password
-      - MERCHANT_ID=${MERCHANT_ID}
-      - ACCESS_CODE=${ACCESS_CODE}
-      - WORKING_KEY=${WORKING_KEY}
-      - PAYMENT_URL=${PAYMENT_URL}
-      - SENDGRID_API_KEY=${SENDGRID_API_KEY}
-    volumes:
-      - .:/usr/src/app
-      - /usr/src/app/node_modules
+      - REDIS_PASSWORD=
+      - JWT_SECRET=your_jwt_secret_here
+      - HOTEL_APIURL=your_hotel_api_url
+      - HOTEL_APIAUTH=your_hotel_api_auth
+      - FLIGHT_APIURL=your_flight_api_url
+      - SMS_AUTH_KEY=your_sms_auth_key
+      - MERCHANT_ID=your_merchant_id
+      - ACCESS_CODE=your_access_code
+      - WORKING_KEY=your_working_key
+      - PAYMENT_URL=your_payment_url
+      - SENDGRID_API_KEY=your_sendgrid_api_key
+      - CLIENT_HOST=localhost
+      - CLIENT_PORT=3000
+      - PROTOCOL=http
+      - APP_HOST=localhost
     depends_on:
-      redis:
-        condition: service_healthy
       mongo:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
-      - app-network
+      - b2c-network
 
   mongo:
-    image: mongo
-    container_name: mongodb
+    image: mongo:6.0
     ports:
       - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=b2capi
     volumes:
-      - mongo-data:/data/db
-    networks:
-      - app-network
+      - mongo_data:/data/db
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
+    networks:
+      - b2c-network
 
   redis:
-    image: redis:alpine
-    container_name: redis
+    image: redis:7-alpine
     ports:
       - "6379:6379"
-    # Remove password configuration for local development
-    networks:
-      - app-network
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
-
-networks:
-  app-network:
-    driver: bridge
+    networks:
+      - b2c-network
 
 volumes:
-  mongo-data:
+  mongo_data:
+  redis_data:
+
+networks:
+  b2c-network:
+    driver: bridge

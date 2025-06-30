@@ -42,38 +42,20 @@ const redis = require('redis');
 
 // Redis connection configuration
 const redisConfig = {
-  host: process.env.REDIS_HOST || 'localhost',
-  port: process.env.REDIS_PORT || 6379,
+  socket: {
+    host: process.env.REDIS_HOST || 'localhost',
+    port: parseInt(process.env.REDIS_PORT) || 6379,
+    connectTimeout: 10000,
+    commandTimeout: 5000
+  },
   // Explicitly disable authentication for local development
-  password: null,
-  // Add connection timeout
-  connect_timeout: 10000,
-  // Add command timeout
-  command_timeout: 5000,
-  // Disable retry strategy for faster failure detection
-  retry_strategy: (options) => {
-    if (options.error && options.error.code === 'ECONNREFUSED') {
-      // End reconnecting on a specific error and flush all commands with a individual error
-      return new Error('The server refused the connection');
-    }
-    if (options.total_retry_time > 1000 * 60 * 60) {
-      // End reconnecting after a specific timeout and flush all commands with a individual error
-      return new Error('Retry time exhausted');
-    }
-    if (options.attempt > 10) {
-      // End reconnecting with built in error
-      return undefined;
-    }
-    // Reconnect after
-    return Math.min(options.attempt * 100, 3000);
-  }
+  password: null
 };
 
 console.log('Redis config:', {
-  host: redisConfig.host,
-  port: redisConfig.port,
-  hasPassword: !!redisConfig.password,
-  password: redisConfig.password
+  host: redisConfig.socket.host,
+  port: redisConfig.socket.port,
+  hasPassword: !!redisConfig.password
 });
 
 // Create and configure Redis client

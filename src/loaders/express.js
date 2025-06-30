@@ -6,6 +6,7 @@ const cors = require('cors');
 const path = require('path');
 
 const apiHistory = require('../middleware/apiHistory');
+const { ipRateLimit } = require('../middleware/ipRateLimit');
 const swaggerUi = require('swagger-ui-express');
 const swaggerDocument = require('../../swagger.json');
 
@@ -44,6 +45,9 @@ const expressLoader = async (app) => {
   app.use(morgan('myformat', {
     stream: logger.stream
   }));
+
+  // IP rate limiting middleware (must come before API history)
+  app.use(ipRateLimit);
 
   // save req res in db
   app.use(apiHistory);

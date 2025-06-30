@@ -13,6 +13,10 @@ const historySchema = new Schema({
     remoteAddress: {
       type: String,
     },
+    ip: {
+      type: String,
+      required: true
+    },
     startTime: {
       type: Date,
     }
@@ -43,5 +47,8 @@ const historySchema = new Schema({
     updatedAt: 'updated_at'
   }
 });
+
+// Add index for IP address for faster queries
+historySchema.index({ 'request.ip': 1, 'date': -1 });
 
 module.exports = mongoose.model('History', historySchema, 'history');
