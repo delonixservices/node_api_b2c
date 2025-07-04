@@ -1,0 +1,198 @@
+[
+  {
+    "id": 1,
+    "name": "Grand Plaza Hotel",
+    "location": "New York City, USA",
+    "price": 250,
+    "currency": "USD",
+    "stars": 5,
+    "description": "Luxury hotel in the heart of Manhattan offering spectacular city views and world-class amenities.",
+    "amenities": [
+      "Free WiFi",
+      "Swimming Pool",
+      "Fitness Center",
+      "Restaurant",
+      "Bar",
+      "Conference Room",
+      "Spa"
+    ],
+    "image": "/images/hotel-1.jpg",
+    "available": true,
+    "rating": 4.8
+  },
+  {
+    "id": 2,
+    "name": "Ocean View Resort",
+    "location": "Bali, Indonesia",
+    "price": 180,
+    "currency": "USD",
+    "stars": 4,
+    "description": "Beautiful beachfront resort with private villas overlooking the Indian Ocean.",
+    "amenities": [
+      "Free WiFi",
+      "Private Beach",
+      "Outdoor Pool",
+      "Spa",
+      "Restaurant",
+      "Bar"
+    ],
+    "image": "/images/hotel-1.jpg",
+    "available": true,
+    "rating": 4.5
+  },
+  {
+    "id": 3,
+    "name": "Mountain Retreat Lodge",
+    "location": "Swiss Alps, Switzerland",
+    "price": 320,
+    "currency": "USD",
+    "stars": 5,
+    "description": "Cozy mountain lodge with stunning alpine views and ski-in/ski-out access.",
+    "amenities": [
+      "Free WiFi",
+      "Sauna",
+      "Hot Tub",
+      "Restaurant",
+      "Bar",
+      "Ski Storage"
+    ],
+    "image": "/images/hotel-1.jpg",
+    "available": true,
+    "rating": 4.9
+  },
+  {
+    "id": 4,
+    "name": "City Lights Inn",
+    "location": "Tokyo, Japan",
+    "price": 150,
+    "currency": "USD",
+    "stars": 3,
+    "description": "Modern hotel in downtown Tokyo with easy access to public transportation and major attractions.",
+    "amenities": [
+      "Free WiFi",
+      "Restaurant",
+      "Business Center",
+      "Laundry Service"
+    ],
+    "image": "/images/hotel-1.jpg",
+    "available": true,
+    "rating": 4.2
+  },
+  {
+    "id": 5,
+    "name": "Desert Oasis Resort",
+    "location": "Dubai, UAE",
+    "price": 280,
+    "currency": "USD",
+    "stars": 5,
+    "description": "Luxurious resort in the desert offering traditional Arabic hospitality with modern comforts.",
+    "amenities": [
+      "Free WiFi",
+      "Swimming Pool",
+      "Spa",
+      "Restaurant",
+      "Bar",
+      "Desert Tours"
+    ],
+    "image": "/images/hotel-1.jpg",
+    "available": false,
+    "rating": 4.7
+  },
+  {
+    "id": 6,
+    "name": "Historic Downtown Hotel",
+    "location": "Rome, Italy",
+    "price": 210,
+    "currency": "USD",
+    "stars": 4,
+    "description": "Boutique hotel housed in a 19th-century building, walking distance from major historical sites.",
+    "amenities": [
+      "Free WiFi",
+      "Restaurant",
+      "Bar",
+      "Room Service",
+      "Concierge"
+    ],
+    "image": "/images/hotel-1.jpg",
+    "available": true,
+    "rating": 4.6
+  },
+  {
+    "id": 7,
+    "name": "Tropical Paradise Resort",
+    "location": "Cancun, Mexico",
+    "price": 190,
+    "currency": "USD",
+    "stars": 4,
+    "description": "All-inclusive beachfront resort with multiple swimming pools and activities for all ages.",
+    "amenities": [
+      "All-Inclusive",
+      "Free WiFi",
+      "Multiple Pools",
+      "Kids Club",
+      "Water Sports",
+      "Entertainment"
+    ],
+    "image": "/images/hotel-1.jpg",
+    "available": true,
+    "rating": 4.4
+  },
+  {
+    "id": 8,
+    "name": "Metropolitan Suites",
+    "location": "London, UK",
+    "price": 270,
+    "currency": "USD",
+    "stars": 5,
+    "description": "Elegant all-suite hotel in central London offering spacious accommodations for business and leisure travelers.",
+    "amenities": [
+      "Free WiFi",
+      "Fitness Center",
+      "Restaurant",
+      "Bar",
+      "Business Center",
+      "Concierge"
+    ],
+    "image": "/images/hotel-1.jpg",
+    "available": true,
+    "rating": 4.7
+  },
+  {
+    "id": 9,
+    "name": "Riverside Cottage Inn",
+    "location": "Paris, France",
+    "price": 130,
+    "currency": "USD",
+    "stars": 3,
+    "description": "Charming boutique inn along the Seine River with authentic Parisian atmosphere.",
+    "amenities": [
+      "Free WiFi",
+      "Breakfast Included",
+      "River View Terrace",
+      "Bicycle Rental"
+    ],
+    "image": "/images/hotel-1.jpg",
+    "available": true,
+    "rating": 4.3
+  },
+  {
+    "id": 10,
+    "name": "Harbor View Hotel",
+    "location": "Sydney, Australia",
+    "price": 240,
+    "currency": "USD",
+    "stars": 4,
+    "description": "Contemporary hotel offering panoramic views of Sydney Harbor and the Opera House.",
+    "amenities": [
+      "Free WiFi",
+      "Swimming Pool",
+      "Fitness Center",
+      "Restaurant",
+      "Bar",
+      "Terrace"
+    ],
+    "image": "/images/hotel-1.jpg",
+    "available": true,
+    "rating": 4.6
+  }
+]

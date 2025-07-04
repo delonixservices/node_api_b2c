@@ -1,0 +1,148 @@
+{
+  "location": [
+    {
+      "type": "Hotels in India",
+      "subMenu": [
+        {
+          "name": "Hotels in Delhi",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Mumbai",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Bangalore",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Chennai",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Hyderabad",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Kolkata",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Pune",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Ahmedabad",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Jaipur",
+          "slug": "#"
+        }
+      ]
+    },
+    {
+      "type": "International Hotels",
+      "subMenu": [
+        {
+          "name": "Hotels in New York",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Canada",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in USA",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Vienna",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Brussels",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Dublin",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Malta",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Oslo",
+          "slug": "#"
+        },
+        {
+          "name": "Hotels in Toronto",
+          "slug": "#"
+        }
+      ]
+    }
+  ],
+
+  "company": [
+    {
+      "name": "About Us",
+      "slug": "/about-us"
+    },
+    {
+      "name": "My Account",
+      "slug": "/dashboard"
+    },
+    {
+      "name": "Products",
+      "slug": "/products"
+    },
+    {
+      "name": "For Business",
+      "slug": "/business"
+    },
+    {
+      "name": "FAQ's",
+      "slug": "/faq"
+    },
+    {
+      "name": "Terms & Conditions",
+      "slug": "/terms"
+    },
+    {
+      "name": "Privacy Policy",
+      "slug": "/privacy-policy"
+    },
+    {
+      "name": "Refund Policy",
+      "slug": "/refund-policy"
+    },
+    {
+      "name": "User Agreement",
+      "slug": "/user-agreement"
+    },
+    {
+      "name": "Customer Care",
+      "slug": "/customer-care"
+    }
+  ],
+
+  "social": [
+    {
+      "name": "Facebook",
+      "slug": "https://www.facebook.com/tripbazaar.in"
+    },
+    {
+      "name": "Twitter",
+      "slug": "https://x.com/trip_bazaar"
+    },
+    {
+      "name": "Instagram",
+      "slug": "https://www.instagram.com/tripbazaar.in/"
+    },
+    {
+      "name": "Linkedin",
+      "slug": "https://in.linkedin.com/company/tripbazaarnp"
+    }
+  ]
+}

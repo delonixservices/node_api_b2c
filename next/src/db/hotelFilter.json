@@ -1,0 +1,101 @@
+{
+  "priceRange": [
+    {
+      "name": "Up to Rs 2000",
+      "selected": false,
+      "value": { "min": 0, "max": 2000 }
+    },
+    {
+      "name": "Rs 2000 to Rs 5000",
+      "selected": false,
+      "value": { "min": 2000, "max": 5000 }
+    },
+    {
+      "name": "Rs 5000 to Rs 8000",
+      "selected": false,
+      "value": { "min": 5000, "max": 8000 }
+    },
+    {
+      "name": "Rs 8000 to Rs 15000",
+      "selected": false,
+      "value": { "min": 8000, "max": 15000 }
+    },
+    {
+      "name": "Rs 15000+",
+      "selected": false,
+      "value": { "min": 15000, "max": 100000 }
+    }
+  ],
+  "RoomTypeFilters": [
+    {
+      "name": "All",
+      "selected": true,
+      "value": ["Standard", "Deluxe", "Superior", "Triple"]
+    },
+    { "name": "Standard", "selected": false, "value": "Standard" },
+    { "name": "Deluxe", "selected": false, "value": "Deluxe" },
+    { "name": "Superior", "selected": false, "value": "Superior" },
+    { "name": "Triple", "selected": false, "value": "Triple" }
+  ],
+  "PropertyTypeFilters": [
+    { "name": "Hotel", "selected": false, "value": "Hotel" },
+    { "name": "Home stay", "selected": false, "value": "Home stay" },
+    { "name": "Guest House", "selected": false, "value": "Guest House" },
+    { "name": "Apartment", "selected": false, "value": "Apartment" }
+  ],
+  "RoomViews": [
+    { "name": "Garden View", "selected": false, "value": "Garden View" },
+    { "name": "City View", "selected": false, "value": "City View" }
+  ],
+  "RoomAmenities": [
+    { "name": "Home Theatre", "selected": false, "value": "Home Theatre" },
+    { "name": "Fireplace", "selected": false, "value": "Fireplace" },
+    { "name": "Balcony", "selected": false, "value": "Balcony" },
+    { "name": "Living Area", "selected": false, "value": "Living Area" },
+    { "name": "Spa Tub", "selected": false, "value": "Spa Tub" },
+    { "name": "Heater", "selected": false, "value": "Heater" }
+  ],
+  "Chains": [
+    { "name": "Bloom Hotels", "selected": false, "value": "Bloom Hotels" },
+    { "name": "Hyatt", "selected": false, "value": "Hyatt" },
+    { "name": "Lemon Tree", "selected": false, "value": "Lemon Tree" },
+    { "name": "The Oberoi", "selected": false, "value": "The Oberoi" },
+    { "name": "Oyo Hotels", "selected": false, "value": "Oyo Hotels" },
+    { "name": "Radisson Blu", "selected": false, "value": "Radisson Blu" }
+  ],
+  "FoodTypeFilters": [
+    {
+      "name": "All",
+      "selected": false,
+      "value": [
+        "Room Only",
+        "Breakfast",
+        "Lunch",
+        "Dinner",
+        "Half board",
+        "Full board",
+        "All inclusive"
+      ]
+    },
+    { "name": "Room Only", "selected": false, "value": 1 },
+    { "name": "Breakfast", "selected": false, "value": 2 },
+    { "name": "Lunch", "selected": false, "value": 3 },
+    { "name": "Dinner", "selected": false, "value": 4 },
+    { "name": "Half board", "selected": false, "value": 5 },
+    { "name": "Full board", "selected": false, "value": 6 },
+    { "name": "All inclusive", "selected": false, "value": 7 }
+  ],
+  "Refundable": [
+    { "name": "All", "selected": true, "value": [true, false] },
+    { "name": "Yes", "selected": false, "value": true },
+    { "name": "No", "selected": false, "value": false }
+  ],
+  "starRating": [
+    { "name": "1 Star", "selected": false, "value": "1" },
+    { "name": "2 Star", "selected": false, "value": "2" },
+    { "name": "3 Star", "selected": false, "value": "3" },
+    { "name": "4 Star", "selected": false, "value": "4" },
+    { "name": "5 Star", "selected": false, "value": "5" },
+    { "name": "Unrated", "selected": false, "value": "0" }
+  ]
+}

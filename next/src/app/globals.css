@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.shadow-neu-soft { box-shadow: 8px 8px 24px #e0e0e0, -8px -8px 24px #ffffff; }
+.shadow-neu-inset { box-shadow: inset 2px 2px 8px #e0e0e0, inset -2px -2px 8px #ffffff; }
+
+@keyframes pulse-animation {
+    0% {
+      opacity: 0.5;
+    }
+    50% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0.5;
+    }
+  }
+
+@keyframes shimmer {
+    0% {
+      background-position: -200px 0;
+    }
+    100% {
+      background-position: calc(200px + 100%) 0;
+    }
+  }
+  @layer utilities {
+    .animate-fadeIn {
+      animation: fadeIn 0.3s ease-in-out forwards;
+    }
+  
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+  }
+  
+  

@@ -1,0 +1,42 @@
+{
+  "sector": [
+    {
+      "name": "Flights",
+      "slug": "/flights"
+    },
+    {
+      "name": "Hotels",
+      "slug": "/hotels"
+    },
+    {
+      "name": "Holidays",
+      "slug": "#"
+    }
+  ],
+
+  "userMenu": [
+    {
+      "name": "Login",
+      "slug": "/login"
+    },
+    {
+      "name": "Sign Up",
+      "slug": "/sign-up"
+    }
+  ],
+
+  "logUserMenu": [
+    {
+      "name": "Dashboard",
+      "slug": "/dashboard"
+    },
+    {
+      "name": "Profile",
+      "slug": "/profile"
+    },
+    {
+      "name": "Logout",
+      "slug": "/logout"
+    }
+  ]
+}
