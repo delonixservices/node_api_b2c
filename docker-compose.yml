@@ -1,0 +1,79 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    ports:
+      - "3334:3334"
+    environment:
+      - NODE_ENV=production
+      - PORT=3334
+      - HOST=0.0.0.0
+      - DB_CONNECTION_STRING=mongodb://mongo:27017/b2capi
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=
+      - JWT_SECRET=your_jwt_secret_here
+      - HOTEL_APIURL=your_hotel_api_url
+      - HOTEL_APIAUTH=your_hotel_api_auth
+      - FLIGHT_APIURL=your_flight_api_url
+      - SMS_AUTH_KEY=your_sms_auth_key
+      - MERCHANT_ID=your_merchant_id
+      - ACCESS_CODE=your_access_code
+      - WORKING_KEY=your_working_key
+      - PAYMENT_URL=your_payment_url
+      - SENDGRID_API_KEY=your_sendgrid_api_key
+      - CLIENT_HOST=localhost
+      - CLIENT_PORT=3000
+      - PROTOCOL=http
+      - APP_HOST=localhost
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - b2c-network
+
+  mongo:
+    image: mongo:6.0
+    ports:
+      - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=b2capi
+    volumes:
+      - mongo_data:/data/db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - b2c-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - b2c-network
+
+volumes:
+  mongo_data:
+  redis_data:
+
+networks:
+  b2c-network:
+    driver: bridge
